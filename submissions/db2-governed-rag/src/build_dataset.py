@@ -1,0 +1,42 @@
+"""Writes data/documents.jsonl: 30 synthetic, non-sensitive docs with governance metadata."""
+import json
+
+D = [
+ # (id, title, category, priority, department, clearance, text)
+ ("pub-01","Office hours and holidays","hr","low","hr","public","The office is open Monday to Friday from 9 AM to 6 PM. Company holidays include Diwali, Holi, Independence Day and Republic Day. Employees are notified of the annual holiday calendar every January."),
+ ("pub-02","Visitor registration","security","low","facilities","public","All visitors must register at the front desk and wear a visitor badge at all times. Visitors must be escorted by an employee in all areas beyond the lobby."),
+ ("pub-03","Public product FAQ","product","low","support","public","Our database product supports vector search, SQL and JSON in a single engine. Documentation and tutorials are available on the public website. Community support is offered through forums."),
+ ("pub-04","Careers and internships","hr","low","hr","public","We offer summer internships for students in computer science. Applications open in January. Selected interns work with a mentor on a real project for eight weeks."),
+ ("pub-05","Open source contribution guide","engineering","low","engineering","public","External contributors can submit pull requests on our public repositories. Every pull request needs a description, tests and a signed contributor agreement."),
+ ("pub-06","Brand and logo usage","marketing","low","marketing","public","The company logo may not be altered or recoloured. Partners must use the approved logo files and keep clear space equal to the logo height."),
+ ("pub-07","Support channels","support","medium","support","public","Customers can open a ticket through the support portal or call the helpline. Severity 1 tickets get a first response within one hour, severity 2 within four hours."),
+ ("pub-08","Event participation policy","marketing","low","marketing","public","Employees may speak at public conferences after approval from their manager. Slides must not contain customer names or unreleased product plans."),
+ ("int-01","Remote work policy","hr","medium","hr","internal","Employees may work remotely up to three days a week with manager approval. A secure VPN connection is mandatory. Company laptops must not be used on public Wi-Fi without the VPN."),
+ ("int-02","Expense reimbursement","finance","medium","finance","internal","Expenses must be submitted within 30 days with receipts. Travel above 500 dollars needs prior approval from the department head. Meals are reimbursed up to a daily limit."),
+ ("int-03","Password and MFA standard","security","high","security","internal","Passwords must be at least 14 characters and rotated every 180 days. Multi-factor authentication is required for all internal systems and the VPN. Shared accounts are forbidden."),
+ ("int-04","Code review standard","engineering","medium","engineering","internal","Every change needs one approving review from a code owner. Reviewers check correctness, tests, performance impact and security. Large changes should be split into smaller pull requests."),
+ ("int-05","Database backup runbook","operations","high","operations","internal","Full backups run nightly at 2 AM and incremental backups every four hours. Backups are retained for 35 days. Restore tests are performed monthly and results are logged in the operations wiki."),
+ ("int-06","On-call rotation","operations","medium","operations","internal","On-call engineers rotate weekly. The primary responder acknowledges pages within 10 minutes. If there is no acknowledgement the page escalates to the secondary responder and then the manager."),
+ ("int-07","Release process","engineering","medium","engineering","internal","Releases ship every second Tuesday. A release candidate must pass regression tests and a performance gate. Hotfixes follow a shortened process but still need two approvals."),
+ ("int-08","Vendor onboarding","finance","medium","procurement","internal","New vendors must complete a security questionnaire and sign a data processing agreement. Procurement checks financial health before the first purchase order is issued."),
+ ("int-09","Incident severity definitions","operations","high","operations","internal","Severity 1 means a full outage or data loss risk for customers. Severity 2 means major degradation. Severity 3 means a minor issue with a workaround. Severity 1 incidents require an incident commander."),
+ ("int-10","Learning budget","hr","low","hr","internal","Each employee has an annual learning budget for courses, books and certifications. Unused budget does not roll over. Requests are approved by the manager."),
+ ("res-01","Incident 2026-041: storage failover","operations","high","operations","restricted","On 12 March a storage controller failed and the cluster failed over to the standby after 7 minutes. Root cause was a firmware bug. Customer impact was limited to read-only mode for the affected tenants. Firmware was patched on all nodes."),
+ ("res-02","Security incident: phished credentials","security","high","security","restricted","An employee entered credentials on a phishing page. The account was used for a login from an unusual location. The session was revoked within 20 minutes, the password reset, and no data access was found in the audit logs."),
+ ("res-03","Executive compensation bands","finance","high","finance","restricted","Compensation bands for director level and above are reviewed every year by the compensation committee. Bonus pools are set as a percentage of operating profit. Details are confidential to the committee."),
+ ("res-04","Acquisition target shortlist","finance","high","strategy","restricted","The strategy team shortlisted three small analytics companies for a possible acquisition. Due diligence is scheduled for next quarter. Names and valuation ranges must not be shared outside the deal team."),
+ ("res-05","Penetration test findings","security","high","security","restricted","The annual penetration test found two high severity issues: an exposed admin endpoint and weak rate limiting on the login API. Both have owners and a fix deadline of 30 days. Retest is scheduled after fixes."),
+ ("res-06","Unreleased roadmap: vector features","product","high","product","restricted","The next major release plans hybrid keyword and vector search, smaller vector indexes through quantization, and faster index builds. Launch dates are internal and must not be shared with customers."),
+ ("res-07","Layoff contingency plan","hr","high","hr","restricted","If revenue targets are missed, a contingency plan covers a hiring freeze first, then travel cuts, and only then workforce reduction. This plan is known only to the leadership team."),
+ ("res-08","Customer data breach playbook","security","high","security","restricted","If customer data exposure is suspected, legal and the security lead must be notified within one hour. Regulators are notified within 72 hours where required. Customers are informed after the scope is confirmed."),
+ ("res-09","Database encryption key rotation","operations","high","operations","restricted","Master encryption keys are rotated every 90 days by two operators using split knowledge. Rotation is performed in a maintenance window and verified by restoring from a fresh backup."),
+ ("res-10","Quarterly financial forecast","finance","medium","finance","restricted","The forecast expects revenue growth of eight percent next quarter driven by cloud subscriptions. Margins are expected to dip slightly because of data center expansion costs."),
+ ("int-11","Data retention policy","security","medium","legal","internal","Customer support tickets are retained for three years. Application logs are retained for 90 days. Personal data is deleted on request within 30 days unless a legal hold applies."),
+ ("pub-09","Accessibility statement","product","low","product","public","We aim to make our products usable with screen readers and keyboard navigation. Accessibility issues can be reported through the support portal and are triaged as normal tickets."),
+]
+
+with open("data/documents.jsonl", "w") as f:
+    for id_, title, cat, pri, dept, clr, text in D:
+        f.write(json.dumps({"id": id_, "title": title, "text": text,
+                            "meta": {"category": cat, "priority": pri, "department": dept, "clearance": clr}}) + "\n")
+print(len(D), "documents written")
