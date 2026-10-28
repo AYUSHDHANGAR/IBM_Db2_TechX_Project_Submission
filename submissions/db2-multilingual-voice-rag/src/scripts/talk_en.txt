@@ -1,0 +1,7 @@
+Welcome to this short talk on vector search in IBM D B two.
+Starting with version twelve point one point two, D B two has a native VECTOR data type. You declare a column such as VECTOR of seven hundred sixty eight, FLOAT32, and store embeddings right next to your normal relational columns.
+To find similar items, D B two provides the VECTOR_DISTANCE function. You pass two vectors and a metric, and D B two returns how far apart they are. Supported metrics include cosine, dot product, Euclidean, squared Euclidean, Hamming and Manhattan.
+A search is just a SQL query. You order the rows by VECTOR_DISTANCE and fetch the first few rows. Because it is SQL, you can add a WHERE clause on any other column in the same statement.
+This is useful for access control. For example, a public user can be limited to public documents, while a manager can search internal documents too, and the filter runs inside the database before any text reaches the language model.
+For Haystack developers, the I B M D B Haystack package provides the I B M D B two Document Store and the I B M D B two Embedding Retriever. The embedding size you give the document store must match the output size of your embedding model.
+Thank you for listening.
