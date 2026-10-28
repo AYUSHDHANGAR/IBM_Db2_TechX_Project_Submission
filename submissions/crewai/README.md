@@ -172,4 +172,4 @@ python -m unittest discover -s tests -p "test_*.py"
 ## Team Members & Credits
 | Name | GitHub Handle | Role / Contribution |
 |---|---|---|
-| Pawan Thakur | [@PawanThakurIBM](https://github.com/PawanThakurIBM) | Architecture, Db2 Vector Integration, Haystack Pipeline, CrewAI Multi-Agent System |
+| Pawan | [@PawanThakurIBM](https://github.com/PawanThakurIBM) | Architecture, Db2 Vector Integration, Haystack Pipeline, CrewAI Multi-Agent System |
