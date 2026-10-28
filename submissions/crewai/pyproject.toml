@@ -1,0 +1,30 @@
+[project]
+name = "crewai-db2-profile-matcher"
+version = "0.1.0"
+description = "CV-to-Job Profile Matching using CrewAI with IBM Db2 Vector Search and Haystack Ingestion powered by IBM Granite Local Embeddings"
+readme = "README.md"
+requires-python = ">=3.10,<=3.13"
+dependencies = [
+    "crewai>=0.152.0",
+    "crewai-tools>=0.58.0",
+    "ibm-db>=3.2.0",
+    "ibm-db-haystack>=0.1.0",
+    "sentence-transformers-haystack>=2.0.0",
+    "haystack-ai>=2.0.0",
+    "sentence-transformers>=3.0.0",
+    "transformers>=4.40.0",
+    "torch>=2.2.0",
+    "openai>=1.30.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.0.0",
+    "pandas>=2.0.0",
+]
+
+[project.scripts]
+match_to_proposal = "src.match_to_proposal.main:run"
+ingest_jobs = "src.ingestion.ingest_jobs_haystack:main"
+setup_db2 = "src.ingestion.setup_db2_table:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

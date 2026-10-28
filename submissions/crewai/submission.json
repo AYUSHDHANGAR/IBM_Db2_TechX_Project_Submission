@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "project": {
+    "title": "Candidate Profile to Job Matching with CrewAI & IBM Db2 Vector Search",
+    "slug": "crewai",
+    "short_description": "Enterprise multi-agent candidate-to-position matching system with local IBM Granite offline embeddings, decoupled Haystack Db2 ingestion, and CrewAI DB2VectorSearchTool similarity search.",
+    "category": "AI / RAG / Data Engineering / Analytics",
+    "repo_url": "https://github.com/KunalGolaIBM/IBM_Db2_TechX_Project_Submission",
+    "demo_url": "",
+    "video_url": ""
+  },
+  "team": {
+    "name": "CrewAI Db2 Innovators",
+    "members": [
+      {
+        "name": "Pawan Thakur",
+        "email": "pawanthakur@ibm.com",
+        "github": "PawanThakurIBM",
+        "role": "AI / Backend Developer"
+      }
+    ]
+  },
+  "ibm_db2": {
+    "edition": "IBM Db2 Database",
+    "connector": "ibm_db / ibm-db-haystack / crewai-tools",
+    "features_used": [
+      "Relational Tables",
+      "Vector Search (VECTOR datatype)",
+      "VECTOR_DISTANCE (Cosine Similarity)",
+      "CLOB Data Storage"
+    ]
+  },
+  "tech_stack": {
+    "languages": [
+      "Python"
+    ],
+    "frameworks": [
+      "CrewAI",
+      "Haystack 2.x",
+      "PyTorch",
+      "Sentence-Transformers"
+    ],
+    "ai_models": [
+      "ibm-granite/granite-embedding-311m-multilingual-r2",
+      "granite3.3:8b (Ollama)"
+    ]
+  }
+}

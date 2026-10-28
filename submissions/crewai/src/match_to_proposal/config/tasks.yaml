@@ -1,0 +1,32 @@
+read_cv_task:
+  description: >
+    Read and parse the candidate CV file located at: {path_to_cv}.
+    Extract and structure all pertinent information, specifically:
+    1. Candidate Full Name & Professional Title
+    2. Professional Summary
+    3. Technical Skills (Languages, Frameworks, Databases, Tools)
+    4. Work Experience & Roles with key responsibilities and impact
+    5. Educational Background
+    6. Key Achievements and Projects
+  expected_output: >
+    A structured markdown summary of the candidate's profile highlighting primary technical
+    skills, domain specializations, and career level.
+
+match_cv_task:
+  description: >
+    Using the structured candidate profile from the CV Reader task:
+    1. Formulate targeted search queries representing the candidate's skills (e.g., 'Senior AI Engineer Python CrewAI RAG', 'Full-stack Python Developer', etc.).
+    2. Use the DB2VectorSearchTool to query the IBM Db2 vector table for the closest matching job descriptions.
+    3. Analyze each retrieved job posting (comparing required skills, responsibilities, and experience level against the candidate).
+    4. Compute a match score (0-100%) and write a clear evaluation for each position including key strengths and any skill gaps.
+    5. Rank all matched positions from best fit to lowest fit.
+  expected_output: >
+    A comprehensive Job Matching Report in markdown format containing:
+    - Candidate Profile Summary
+    - Ranked List of Matched Positions:
+        * Job Title & Company Name
+        * Location & Experience Level
+        * Match Score (%)
+        * Alignment Summary (why the candidate is a strong fit)
+        * Areas for Growth / Missing Requirements (if any)
+    - Final Recommendation & Next Steps for the candidate
