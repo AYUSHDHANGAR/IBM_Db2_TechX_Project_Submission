@@ -1,0 +1,39 @@
+name: 🚀 Submission Help / PR Assistance
+description: Get help with opening, structuring, or troubleshooting your project submission PR.
+title: "[Help]: "
+labels: ["submission-help", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reaching out! Before submitting, ensure you have read the [Submission Guide](docs/submission-guide.md) and [FAQ](docs/faq.md).
+  - type: input
+    id: project-slug
+    attributes:
+      label: Project Slug / Team Name
+      description: The name or slug of your submission (e.g. `langchain-db2-assistant`).
+      placeholder: my-awesome-project
+    validations:
+      required: true
+  - type: input
+    id: pr-link
+    attributes:
+      label: Pull Request URL (if opened)
+      description: Link to your submission PR.
+      placeholder: https://github.com/KunalGolaIBM/IBM_Db2_TechX_Project_Submission/pull/123
+  - type: textarea
+    id: issue-description
+    attributes:
+      label: What issue or question are you encountering?
+      description: Describe what you are trying to do, what happened, and any error messages received.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-check
+      options:
+        - label: I have reviewed the `submissions/_template/` structure.
+          required: true
+        - label: I checked that my files do not contain exposed API keys or secrets.
+          required: true

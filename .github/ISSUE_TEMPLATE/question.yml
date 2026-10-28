@@ -1,0 +1,24 @@
+name: 💬 Question / General Inquiry
+description: Ask a question about the hackathon rules, Db2 integration requirements, or submission flow.
+title: "[Question]: "
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know or clarify?
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - IBM Db2 Integration / Tools
+        - Submission & Pull Request Guidelines
+        - Judging & Evaluation Criteria
+        - Team / Eligibility
+        - Other
+    validations:
+      required: true
