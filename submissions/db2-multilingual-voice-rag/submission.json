@@ -1,0 +1,37 @@
+{
+  "project": {
+    "title": "Voice RAG in Hindi and English: Multilingual Audio Search with Db2 Vectors",
+    "slug": "db2-multilingual-voice-rag",
+    "short_description": "Transcribe Hindi and English talks with Whisper, store multilingual embeddings in Db2, and answer Hindi or English questions with the audio file and timestamp of the source.",
+    "category": "AI / RAG / Multilingual / Speech",
+    "demo_url": "",
+    "video_url": "",
+    "repo_url": ""
+  },
+  "team": {
+    "name": "Db2 Governed RAG",
+    "members": [
+      {
+        "name": "Keshav Maheshwari",
+        "github": "keshav-23",
+        "email": "62067377+keshav-23@users.noreply.github.com",
+        "role": "Developer"
+      }
+    ]
+  },
+  "ibm_db2": {
+    "edition": "IBM Db2 12.1.2+ (native VECTOR type)",
+    "connector": "ibm_db via ibm-db-haystack (IBMDb2DocumentStore, IBMDb2EmbeddingRetriever)",
+    "features_used": [
+      "VECTOR(768, FLOAT32) column",
+      "VECTOR_DISTANCE (COSINE)",
+      "JSON metadata (language, audio source, start and end time) stored with each vector",
+      "FETCH FIRST n ROWS ONLY top-k"
+    ]
+  },
+  "tech_stack": {
+    "languages": ["Python"],
+    "frameworks": ["Haystack", "sentence-transformers", "openai-whisper"],
+    "ai_models": ["Whisper medium (speech to text)", "intfloat/multilingual-e5-base (768-dim embeddings)", "Ollama qwen2.5:7b (answers)"]
+  }
+}

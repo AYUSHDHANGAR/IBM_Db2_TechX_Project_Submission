@@ -1,0 +1,136 @@
+{
+ "source": "audio/talk_en.mp3",
+ "language": "en",
+ "segments": [
+  {
+   "start": 0.0,
+   "end": 4.4,
+   "text": "Welcome to this short talk on Vector Search in IBM DB2."
+  },
+  {
+   "start": 5.1,
+   "end": 8.3,
+   "text": "Starting with version 12.1.2."
+  },
+  {
+   "start": 8.5,
+   "end": 11.4,
+   "text": "DB2 has a native vector data type."
+  },
+  {
+   "start": 11.7,
+   "end": 15.6,
+   "text": "You declare a column such as vector of 768,"
+  },
+  {
+   "start": 16.2,
+   "end": 17.6,
+   "text": "float 32,"
+  },
+  {
+   "start": 17.7,
+   "end": 21.9,
+   "text": "and store embeddings right next to your normal relational columns."
+  },
+  {
+   "start": 22.3,
+   "end": 24.1,
+   "text": "To find similar items,"
+  },
+  {
+   "start": 24.3,
+   "end": 28.2,
+   "text": "DB2 provides the vector underscore distance function."
+  },
+  {
+   "start": 28.4,
+   "end": 30.9,
+   "text": "You pass two vectors and a metric,"
+  },
+  {
+   "start": 31.0,
+   "end": 34.2,
+   "text": "and DB2 returns how far apart they are."
+  },
+  {
+   "start": 34.4,
+   "end": 38.4,
+   "text": "Supported metrics include cosine, dot product,"
+  },
+  {
+   "start": 38.4,
+   "end": 41.2,
+   "text": "Euclidean, squared Euclidean,"
+  },
+  {
+   "start": 41.3,
+   "end": 42.9,
+   "text": "Hamming and Manhattan."
+  },
+  {
+   "start": 43.0,
+   "end": 45.4,
+   "text": "A search is just a SQL query."
+  },
+  {
+   "start": 45.6,
+   "end": 50.8,
+   "text": "You order the rows by vector underscore distance and fetch the first few rows."
+  },
+  {
+   "start": 51.3,
+   "end": 52.9,
+   "text": "Because it is SQL,"
+  },
+  {
+   "start": 53.0,
+   "end": 57.0,
+   "text": "you can add a where clause on any other column in the same statement."
+  },
+  {
+   "start": 57.6,
+   "end": 60.3,
+   "text": "This is useful for access control."
+  },
+  {
+   "start": 60.5,
+   "end": 65.2,
+   "text": "For example, a public user can be limited to public documents,"
+  },
+  {
+   "start": 65.4,
+   "end": 68.8,
+   "text": "while a manager can search internal documents too."
+  },
+  {
+   "start": 69.0,
+   "end": 74.2,
+   "text": "And the filter runs inside the database before any text reaches the language model."
+  },
+  {
+   "start": 74.9,
+   "end": 76.9,
+   "text": "For Haystack developers,"
+  },
+  {
+   "start": 77.0,
+   "end": 84.6,
+   "text": "the IBM DB Haystack package provides the IBM DB2 document store and the IBM DB2"
+  },
+  {
+   "start": 85.1,
+   "end": 86.8,
+   "text": "embedding retriever."
+  },
+  {
+   "start": 87.0,
+   "end": 93.0,
+   "text": "The embedding size you give the document store must match the output size of your embedding model."
+  },
+  {
+   "start": 93.6,
+   "end": 95.0,
+   "text": "Thank you for listening."
+  }
+ ]
+}
