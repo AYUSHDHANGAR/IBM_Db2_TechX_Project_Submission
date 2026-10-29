@@ -1,0 +1,6 @@
+job_id,job_title,required_skills,responsibilities,company_name,location,experience_level
+JOB-101,Senior AI Engineer,"Python,FastAPI,CrewAI,LangChain,Vector Databases,Docker","Design multi-agent LLM systems, implement vector search and RAG pipelines, optimize LLM inference",CognitiveScale AI,San Francisco CA,Senior
+JOB-102,Full-Stack Python Engineer,"Python,Django,React,TypeScript,PostgreSQL,RESTful APIs","Develop end-to-end web applications, build robust REST APIs, manage database schemas and integrations",NextGen Cloud,San Jose CA,Mid-Senior
+JOB-103,DevOps & Platform Engineer,"Docker,Kubernetes,OpenShift,CI/CD,Terraform,AWS","Maintain container orchestration platforms, build deployment automation pipelines, monitor system reliability",Enterprise Cloud Systems,Austin TX,Senior
+JOB-104,Data Scientist / ML Engineer,"Python,PyTorch,Scikit-Learn,SQL,Data Analysis","Develop predictive machine learning models, analyze complex datasets, build feature engineering pipelines",DataSphere Analytics,New York NY,Mid-Senior
+JOB-105,Database Administrator & Architect,"IBM Db2,SQL,Database Tuning,High Availability,Backup Recovery","Architect enterprise database solutions, optimize SQL query execution, manage backup and disaster recovery",Global FinTech Corp,Chicago IL,Senior
