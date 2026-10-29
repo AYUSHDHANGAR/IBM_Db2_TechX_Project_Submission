@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "project": {
+    "title": "BAKEBOX Choco AI (Autonomous AI Bakery Management Platform & 3D Storefront)",
+    "slug": "bakebox-choco-ai",
+    "short_description": "Autonomous Master Baker AI Assistant and Digital Bakery Commerce Platform powered by IBM Db2 native vector search, LlamaIndex DB2LlamaVS, and Hybrid RRF.",
+    "category": "AI / RAG / Data Engineering / Analytics",
+    "demo_url": "http://127.0.0.1:3000",
+    "video_url": "",
+    "repo_url": "https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission"
+  },
+  "team": {
+    "name": "Shri Ram BAKEBOX AI Team",
+    "members": [
+      {
+        "name": "Ayush Dhangar",
+        "github": "AYUSHDHANGAR",
+        "email": "ayushdhangar12345@gmail.com",
+        "role": "Full-Stack & AI Systems Architect"
+      }
+    ]
+  },
+  "ibm_db2": {
+    "edition": "Db2 Community Edition (Docker / VS Code Extension - IBMDB201)",
+    "connector": "ibm_db / ibm_db_dbi / llama-index-vector-stores-db2",
+    "features_used": [
+      "Native VECTOR Column (vector(384, FLOAT32))",
+      "In-engine Cosine Vector Search via DB2LlamaVS",
+      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS)",
+      "Hybrid Reciprocal Rank Fusion (RRF: k=60)"
+    ]
+  },
+  "tech_stack": {
+    "languages": ["Python", "JavaScript"],
+    "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "FastAPI", "React", "Tailwind CSS"],
+    "ai_models": ["BAAI/bge-small-en-v1.5", "Google Gemini 3.5 Flash", "FlashRank Cross-Encoder"]
+  }
+}
