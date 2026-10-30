@@ -1,9 +1,10 @@
-# System Architecture: BAKEBOX Choco AI
+# System Architecture: BAKEBOX-AI (Autonomous AI Bakery Management & Customer Support)
 ## Autonomous AI Bakery Management Platform & Hybrid RAG System on IBM Db2
 
-**Event:** IBM Db2 TechX Summit • GL Bajaj Group of Institutions, Mathura (Db2Hack Dev Hacks)  
+**Event:** IBM Db2 TechX Summit 2026 (Db2Hack Dev Hacks)  
 **Project Slug:** `submissions/bakebox-choco-ai`  
-**Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR))  
+**Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) • ayush.dhangar2024@glbajgroup.org)  
+**IBM Db2 Environment:** IBM Db2 Community Edition (`IBMDB201` via IBM Db2 VS Code Extension & Docker, Port 50000)  
 **Frameworks:** LlamaIndex, `llama-index-vector-stores-db2` (`DB2LlamaVS`), IBM Db2 (`ibm_db_dbi`)
 
 ---
