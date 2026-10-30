@@ -1,38 +1,54 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "project": {
-    "title": "BAKEBOX Choco AI (Autonomous AI Bakery Management Platform & 3D Storefront)",
+    "title": "BAKEBOX-AI: AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT",
     "slug": "bakebox-choco-ai",
-    "short_description": "Autonomous Master Baker AI Assistant and Digital Bakery Commerce Platform powered by IBM Db2 native vector search, LlamaIndex DB2LlamaVS, and Hybrid RRF.",
+    "short_description": "24/7 Autonomous AI Customer Care, Order Tracking & Master Baker Digital Management Platform for Shri Ram Baker (Mathura) powered by IBM Db2 native vector search (DB2LlamaVS), LlamaIndex Hybrid RRF, and live transactional order intelligence.",
     "category": "AI / RAG / Data Engineering / Analytics",
     "demo_url": "http://127.0.0.1:3000",
-    "video_url": "",
-    "repo_url": "https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission"
+    "video_url": "https://youtu.be/MvH82OEsDUA?si=ls0FZOuDwLTDWvQO",
+    "repo_url": "https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission/tree/submission/bakebox-choco-ai"
   },
   "team": {
-    "name": "Shri Ram BAKEBOX AI Team",
+    "name": "BAKEBOX AI Team",
     "members": [
       {
         "name": "Ayush Dhangar",
         "github": "AYUSHDHANGAR",
-        "email": "ayushdhangar12345@gmail.com",
-        "role": "Full-Stack & AI Systems Architect"
+        "email": "ayush.dhangar2024@glbajgroup.org",
+        "role": "Full-Stack Architect, IBM Db2 & AI Systems Engineer"
       }
     ]
   },
   "ibm_db2": {
-    "edition": "Db2 Community Edition (Docker / VS Code Extension - IBMDB201)",
-    "connector": "ibm_db / ibm_db_dbi / llama-index-vector-stores-db2",
+    "edition": "Db2 Community Edition (Docker / VS Code IBM Db2 Extension Instance - IBMDB201)",
+    "connector": "ibm_db / ibm_db_dbi / llama-index-vector-stores-db2 (DB2LlamaVS)",
     "features_used": [
-      "Native VECTOR Column (vector(384, FLOAT32))",
-      "In-engine Cosine Vector Search via DB2LlamaVS",
-      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS)",
-      "Hybrid Reciprocal Rank Fusion (RRF: k=60)"
+      "Native VECTOR Column (VECTOR(384, FLOAT32)) with in-engine Cosine distance search",
+      "In-engine Cosine Vector Search via official DB2LlamaVS LlamaIndex vector store",
+      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS) for real-time kitchen baking status",
+      "Enterprise Inventory Catalogs (BB_CAKES, BB_CUSTOM_CAKES, BB_PARTY_ACCESSORIES for 610+ items)",
+      "Isolated Session Memory Buffer (BB_USER_CONVERSATION_BUFFER) & Authentication (BB_USERS)",
+      "Hybrid Reciprocal Rank Fusion (RRF: k=60) combining Db2 dense vectors with TF-IDF lexical search",
+      "Zero-External Vector DB: 100% embeddings, relational records, and conversational memory in IBM Db2"
     ]
   },
   "tech_stack": {
-    "languages": ["Python", "JavaScript"],
-    "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "FastAPI", "React", "Tailwind CSS"],
-    "ai_models": ["BAAI/bge-small-en-v1.5", "Google Gemini 3.5 Flash", "FlashRank Cross-Encoder"]
+    "languages": [
+      "Python",
+      "JavaScript"
+    ],
+    "frameworks": [
+      "LlamaIndex",
+      "llama-index-vector-stores-db2",
+      "FastAPI",
+      "React",
+      "Tailwind CSS"
+    ],
+    "ai_models": [
+      "BAAI/bge-small-en-v1.5",
+      "Google Gemini 3.5 Flash",
+      "FlashRank Cross-Encoder"
+    ]
   }
 }
