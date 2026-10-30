@@ -1,118 +1,115 @@
 # BAKEBOX-AI: AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT
 
-> **One-Line Pitch:** An enterprise-grade autonomous AI customer care, real-time kitchen order tracking, and master baker management platform for Shri Ram Baker (Mathura), powered by IBM Db2 native vector search (`DB2LlamaVS`), LlamaIndex Hybrid RRF ($k=60$), and live transactional order intelligence with zero external vector databases.
+> **One-Line Pitch:** An enterprise autonomous AI bakery management system and intelligent customer support platform powered by **CHOCO AI** — leveraging IBM Db2 hybrid database (relational + native vector search via `DB2LlamaVS`), LlamaIndex Advanced RAG with Reciprocal Rank Fusion (RRF), and real-time agentic tool calling for 24/7 intelligent customer engagement.
 
 ---
 
 ## Table of Contents
-- [Problem Statement](#problem-statement)
-- [Solution Overview](#solution-overview)
+- [BAKEBOX - CHOCO AI: Dual-Perspective Overview](#bakebox---choco-ai-dual-perspective-overview-users--management)
+- [1. The Core Problem Statement: Dual-Perspective Challenges](#1-the-core-problem-statement-dual-perspective-challenges)
+- [2. How CHOCO AI Solves Both Perspectives](#2-how-choco-ai-solves-both-perspectives)
+- [3. Technical Architecture & Tech Stack](#3-technical-architecture--tech-stack)
+- [4. Key Architectural Highlights](#4-key-architectural-highlights)
 - [IBM Db2 Integration](#ibm-db2-integration)
-- [AI / LLM Architecture](#ai--llm-architecture)
-- [Tech Stack](#tech-stack)
 - [Prerequisites](#prerequisites)
 - [Setup & Installation](#setup--installation)
 - [Configuration](#configuration)
 - [Running the Project](#running-the-project)
 - [Testing & Verification](#testing--verification)
-- [Screenshots & Demo](#screenshots--demo)
+- [Demo & Links](#demo--links)
 - [Known Limitations & Future Roadmap](#known-limitations--future-roadmap)
 - [Team Members & Credits](#team-members--credits)
+- [License](#license)
 
 ---
 
-## Problem Statement
+## BAKEBOX - CHOCO AI: Dual-Perspective Overview (Users & Management)
 
-Traditional artisanal bakery and fresh-food retail operations in tier-2 cities like Mathura face critical operational bottlenecks:
+### 1. The Core Problem Statement: Dual-Perspective Challenges
 
-1. **Lack of Instant Customer Care & Dietary Resolution:** Bakery customers struggle to obtain instant assistance for custom cake inquiries, dietary doubts (e.g., 100% eggless / Jain preparation), store policies, or submitting order feedback without calling the shop or waiting at crowded counters.
-2. **Opaque Kitchen Order Progress:** Once an order is placed, customers have no self-service mechanism to check their live preparation and kitchen baking status. Because handcrafted fresh cakes require 3 to 4 hours of soaking and cold-setting, customers make repeated follow-up calls, creating anxiety and frustration.
-3. **Overwhelmed Store Staff During Peak Hours:** Store operators and kitchen bakers get overwhelmed managing manual customer care, status inquiries, and vast catalog lookups simultaneously during peak festival and celebration hours.
-4. **AI Hallucinations in Food Commerce:** Standard generic AI chatbots hallucinate non-existent cake flavors, quote arbitrary prices, or give dangerous food heating advice (such as microwaving puff pastries instead of warming them on a dry tawa).
-5. **Target Beneficiaries:** 
-   - **Bakery Customers:** Get 24/7 instant customer care, visual cake recommendations, easy order placement, and live order status tracking without phone calls.
-   - **Bakery Owners & Support Staff:** Automate daily customer query resolution, live status updates, and order workflows, saving hours of manual counter and phone work.
-   - **Local Retail Businesses:** Gain a proven, practical digital system that unifies customer support, feedback handling, and live kitchen operations.
+Traditional bakeries and food delivery platforms struggle with significant communication and operational gaps that negatively impact both customers and business management:
+
+#### Customer-Facing Pain Points:
+- **Information Hesitation:** Customers frequently hesitate or feel awkward asking detailed questions about product specs, precise ingredients, allergen details, custom sizing, or tailored cake recommendations.
+- **Operational & Discount Blind Spots:** Real-time order status tracking, delivery updates, account balances, and available discounts are often locked behind clunky interfaces or delayed support. Furthermore, customers miss out on great active coupons or ideal product suggestions simply because they aren't visible or proactively recommended.
+- **Customer Care Availability Gaps:** Live customer support drops off drastically after 9 PM, leaving late-night craving inquiries, urgent modifications, and order tracking completely unaddressed.
+
+#### Management & Business-Facing Pain Points:
+- **Lost Sales & Conversion Bottlenecks:** Because human customer support agents are unavailable after hours or overwhelmed during peak times, businesses fail to capture high-intent late-night orders and inquiries.
+- **Missed Upselling Opportunities:** Traditional menus and static interfaces cannot proactively recommend the right cake or apply the best available coupons based on a customer's specific preference or budget, resulting in missed revenue.
+- **Operational Inefficiencies:** Managing inquiries about inventory, active coupons, and order statuses manually drains staff bandwidth and increases response latency.
 
 ---
 
-## Solution Overview
+### 2. How CHOCO AI Solves Both Perspectives
 
-**BAKEBOX** solves these challenges through a unified digital platform and an autonomous master baker AI assistant (**CHOCO AI**), deeply coupled with **IBM Db2**:
+When users interact with CHOCO AI, the platform bridges the gap completely for both sides:
 
-1. **24/7 AI Customer Care & Query Resolution (CHOCO AI):** An intelligent assistant that instantly resolves customer queries regarding 610+ cakes, custom designs, pricing, and store policies, while handling customer support and feedback seamlessly.
-2. **Real-Time Order Status Tracking & Updates:** Customers can directly ask CHOCO AI for their live order status (e.g., *Confirmed*, *Baking in Khatoti Kua kitchen*, or *Ready for pickup*). Store staff update statuses in real time through the connected system, and the AI retrieves live ground truth directly from IBM Db2.
-3. **Interactive Visual Cake Selection (Strict 3-Cake Selection Rule):** Instead of plain text replies, the AI engine renders 3 verified, interactive cake cards (with photos, verified pricing, base selection, and SKUs) right inside the chat window so customers can compare and order effortlessly.
-4. **Isolated Customer Conversation Memory:** Maintains private, user-isolated chat histories (`BB_USER_CONVERSATION_BUFFER`) inside IBM Db2 so every customer receives personalized support and follow-up assistance without session cross-contamination.
-5. **Culturally Grounded Persona:** Speaks with a warm, authentic Mathura Hinglish persona (*"Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!"*) backed by authentic baking advisory rules.
+#### For the User (Seamless, Hesitation-Free Experience):
+- **Instant 24/7 Access:** Available around the clock (even post-9 PM) for late-night queries, live order tracking, and account balance checks.
+- **Personalized Product & Coupon Discovery:** Users can ask about any cake, ingredient, or custom requirement without hesitation. CHOCO AI actively suggests the best-fit cakes and ensures they never miss out on active coupons or discounts.
+- **Rich, Interactive Responses:** Through agentic tools that render structured JSON, users receive interactive product cards and recommendations rather than plain text, making the buying experience smooth and engaging (supporting both Hindi and English).
+
+#### For the Management (Automated Operations & Scalability):
+- **Autonomous 24/7 Conversion Engine:** Acts as an around-the-clock sales and support agent, capturing leads and answering inquiries even when physical shop operations or human support teams are offline.
+- **Intelligent Data Retrieval:** Automatically queries the hybrid database (relational tables and PDFs via IBM DB2) to fetch exact product data, inventory status, and user records instantly.
+- **Zero Data Compromise:** Built with strict session isolation and dedicated buffer memory to ensure user safety, data privacy, and secure business operations at all times.
+
+---
+
+### 3. Technical Architecture & Tech Stack
+
+The architecture is built for high performance, precision retrieval, and zero-cost local embedding generation to handle real-time inventory updates without latency.
+
+- **Database & Storage:** IBM DB2 (managed via the VS Code extension), utilizing a hybrid database structure that unifies both unstructured documents (PDFs) and structured relational tables.
+- **Backend Framework:** FastAPI microservices architecture delivering high-throughput, asynchronous API endpoints.
+- **Frontend:** React 18 + Vite providing a highly responsive, clean, and interactive user interface optimized for fast interaction.
+- **AI & RAG Pipeline:**
+  - **Orchestration Framework:** LlamaIndex configured to build robust, end-to-end ingestion and query pipelines.
+  - **Retrieval Strategy:** Advanced RAG utilizing Reciprocal Rank Fusion (RRF) combined with fixed-size chunking (where individual nodes represent precise table rows or document sections) to guarantee pin-point retrieval accuracy across dynamic product inventories.
+  - **Embeddings:** Hugging Face (BAAI/bge-large) model running locally/freely for rapid embedding generation. This bypasses external API rate limits and costs, ensuring newly added cakes or products are embedded and searchable instantly.
+  - **LLM Engine:** Gemini 3.8 Flash powering fast, cost-effective, and intelligent text generation and reasoning.
+  - **Vector Operations:** IBM DB2 Vector Store integration via `DB2LlamaVS` for efficient similarity search across the hybrid database.
+
+---
+
+### 4. Key Architectural Highlights
+
+- **Hybrid Data Handling:** Seamlessly queries across structured relational tables (inventory, balances, order statuses) and unstructured documents (manuals, policy PDFs) using IBM DB2.
+- **Zero-Latency Ingestion:** Local free embedding generation allows instant indexing of newly added bakery products without depending on external embedding services.
+- **Rich UI Rendering:** Agentic tool responses output structured JSON, allowing the React + Vite frontend to render visually engaging product cards and suggestions instantly.
+- **Bilingual Capability:** Native support for both Hindi and English interactions to match local customer demographics seamlessly.
 
 ---
 
 ## IBM Db2 Integration
 
-IBM Db2 (`IBMDB201`) serves as the single source of truth for all operational, analytical, conversational, and vector data, eliminating the need for external vector databases.
-
-- **Db2 Edition & Environment:** 
-  - IBM Db2 Community Edition (v12.1+) running on Docker / VS Code Extension Instance (`IBMDB201`) on port `50000`.
-  - Configured, inspected, and validated using the official **IBM Db2 for Visual Studio Code Extension**, enabling direct SQL query execution, vector column validation, and table monitoring.
-- **Connector / Driver Used:** 
-  - Official Python drivers `ibm_db` and `ibm_db_dbi`.
-  - Official LlamaIndex vector store connector `llama-index-vector-stores-db2` (`DB2LlamaVS`).
+- **Db2 Edition & Environment:** IBM Db2 Community Edition (Docker / VS Code Extension Instance `IBMDB201` on Port 50000).
+- **Connector / Driver Used:** Official Python drivers `ibm_db` and `ibm_db_dbi`, and official LlamaIndex vector store connector `llama-index-vector-stores-db2` (`DB2LlamaVS`).
 - **Database Schema / Data Models:**
-  - `BB_CHUNKS_VECTOR` / `BB_RAG_CHUNKS`: Native vector table created and managed via `DB2LlamaVS` storing 746 embedded chunks with schema `(id VARCHAR(64) PRIMARY KEY, doc_id VARCHAR(64), embedding vector(384, FLOAT32), node_info BLOB, metadata BLOB, text CLOB)`.
-  - `BB_ORDERS`: Relational transactional table tracking live customer orders `(order_id INT PRIMARY KEY, user_id INT, customer_name VARCHAR(100), customer_phone VARCHAR(20), order_type VARCHAR(50), order_status VARCHAR(50), total_amount DECIMAL(10,2), delivery_address VARCHAR(255), special_notes VARCHAR(255))`.
-  - `BB_ORDER_ITEMS`: Relational line items tracking customized orders `(item_id INT IDENTITY, order_id INT, sku_id VARCHAR(64), item_name VARCHAR(120), quantity INT, unit_price DECIMAL(10,2), cake_base VARCHAR(50), cake_weight VARCHAR(20), custom_message VARCHAR(255))`.
-  - `BB_CAKES`, `BB_CUSTOM_CAKES`, `BB_PARTY_ACCESSORIES`: Structured inventory tables housing the complete 610+ item bakery catalog.
-  - `BB_USER_CONVERSATION_BUFFER` & `BB_USERS`: Stores authenticated customer identities and user-isolated multi-turn conversational history.
+  - `BB_CHUNKS_VECTOR`: Native vector table created via `DB2LlamaVS` for storing dense embeddings with schema `(id VARCHAR(64) PRIMARY KEY, doc_id VARCHAR(64), embedding vector, node_info BLOB, metadata BLOB, text CLOB)`.
+  - `BB_ORDERS`: Relational order table `(order_id INT PRIMARY KEY, user_id INT, customer_name, customer_phone, order_type, order_status, total_amount, delivery_address, special_notes)`.
+  - `BB_ORDER_ITEMS`: Relational line items `(item_id INT IDENTITY, order_id INT, sku_id, item_name, quantity, unit_price, cake_base, cake_weight, custom_message)`.
 - **Key Queries & Operations:**
-  - **In-Engine Native Cosine Vector Search:** Hardware-accelerated Cosine similarity computed directly inside the Db2 engine (`DB2LlamaVS.query()`), eliminating external vector DB latency and maintenance overhead.
-  - **Relational Ground-Truth Joins:** Live parameterized SQL joins across `BB_ORDERS` and `BB_ORDER_ITEMS` triggered upon order inquiry intent, guaranteeing zero hallucination in order status.
-
----
-
-## AI / LLM Architecture
-
-- **Framework:** LlamaIndex 0.14 (`llama-index-core` and `llama-index-vector-stores-db2`).
-- **Embedding Model:** HuggingFace `BAAI/bge-small-en-v1.5` (384 dimensions) via FastEmbed.
-- **LLM / Synthesis Provider:** Google Gemini API (`gemini-3.5-flash-lite`, 1.2s response latency) with Mathura bakery domain guardrails.
-- **Hybrid Retrieval Pipeline (Dense + Sparse RRF):**
-  1. **Intent Classification:** Classifies customer queries into:
-     - *Recommendation Intent:* (e.g., *"Show me anniversary chocolate cake"*)
-     - *Live Order Tracking Intent:* (e.g., *"Status of order #1002"*)
-     - *Store Policy / Advisory Intent:* (e.g., *"Patties reheating rules"*)
-  2. **Reciprocal Rank Fusion (RRF: $k=60$):** Fuses dense vector similarity from IBM Db2 `DB2LlamaVS` with sparse lexical TF-IDF matching:
-     $$\text{RRF Score}(d) = \frac{1}{60 + R_{\text{dense}}(d)} + \frac{1}{60 + R_{\text{sparse}}(d)}$$
-     Ensures exact match on weights (e.g., 0.5kg vs 1kg) and bases (eggless vs regular) alongside deep semantic understanding.
-  3. **Strict 3-Cake Selection Tool:** Generates exactly 3 verified product cards with validated SKUs, pricing, and local assets, avoiding chat screen clutter.
-  4. **Ground-Truth Order Verification:** Intercepts order inquiries to pull directly from Db2 relational tables, returning accurate kitchen statuses (*BAKING at Khatoti Kua kitchen with 3-4 hours preparation notice*) and cleanly suppressing product recommendation cards.
-
----
-
-## Tech Stack
-
-- **Database Engine:** IBM Db2 (v12.1+ Community Edition / `IBMDB201` via IBM Db2 VS Code Extension)
-- **Database Connectors:** `ibm_db`, `ibm_db_dbi`, `llama-index-vector-stores-db2` (`DB2LlamaVS`)
-- **Backend Framework:** Python 3.11+, FastAPI, Uvicorn, Pydantic
-- **AI & RAG Pipeline:** LlamaIndex, FastEmbed (`BAAI/bge-small-en-v1.5`), Google Gemini 3.5 Flash Lite, FlashRank Reranker
-- **Frontend / Storefront:** React 18, Vite, Tailwind CSS, Lucide Icons, Three.js 3D Storefront
+  - In-engine Cosine distance similarity search via `DB2LlamaVS.query()`.
+  - Transactional relational order retrieval joining `BB_ORDERS` and `BB_ORDER_ITEMS`.
 
 ---
 
 ## Prerequisites
-
 - Python >= 3.10
-- Running IBM Db2 instance (Local Docker container or VS Code Db2 extension instance on port `50000`, e.g., `IBMDB201`)
-- Node.js >= 18 (for the React storefront UI)
+- Running local IBM Db2 instance (e.g. `localhost:50000`, database `IBMDB201`)
+- Node.js >= 18 (for running the frontend)
 
 ---
 
 ## Setup & Installation
 
 ```bash
-# 1. Clone your fork and switch to the submission directory
+# 1. Navigate to submission directory
 cd submissions/bakebox-choco-ai
 
-# 2. Install Python dependencies
+# 2. Install required dependencies
 pip install llama-index-core llama-index-vector-stores-db2 ibm-db fastembed scikit-learn
 ```
 
@@ -120,29 +117,22 @@ pip install llama-index-core llama-index-vector-stores-db2 ibm-db fastembed scik
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in your IBM Db2 credentials:
+Copy `.env.example` to `.env` and fill in your Db2 credentials:
 
 ```bash
 cp .env.example .env
 ```
 
 ```env
-# IBM Db2 Connection Parameters (Local Community Edition / IBMDB201)
 DB2_HOST=127.0.0.1
 DB2_PORT=50000
 DB2_DATABASE=IBMDB201
 DB2_USER=your_db2_user
 DB2_PASSWORD=your_db2_password
-
-# Embedding Model Configuration
-EMBEDDING_MODEL_NAME=BAAI/bge-small-en-v1.5
-EMBEDDING_DIM=384
-
-# LLM Synthesis API
 GEMINI_API_KEY=your_gemini_api_key
 ```
 
-> **Security Notice:** Never commit `.env` or sensitive production credentials to Git!
+> **Security Warning:** Never commit `.env` or any real API keys or database passwords to Git!
 
 ---
 
@@ -152,7 +142,7 @@ GEMINI_API_KEY=your_gemini_api_key
 ```bash
 python submissions/bakebox-choco-ai/src/ingest.py
 ```
-*Initializes relational tables `BB_ORDERS`, `BB_ORDER_ITEMS` and ingests 384-dimensional native vectors into `BB_CHUNKS_VECTOR` via `DB2LlamaVS`.*
+*Creates relational tables `BB_ORDERS`, `BB_ORDER_ITEMS` and ingests dense vectors into `BB_CHUNKS_VECTOR` via `DB2LlamaVS`.*
 
 ### 2. Execute Interactive Query Engine
 ```bash
@@ -163,7 +153,7 @@ python submissions/bakebox-choco-ai/src/query_engine.py
 
 ## Testing & Verification
 
-Reviewers can verify the submission folder structure, metadata, and functionality using the official hackathon validator:
+Reviewers can verify the submission folder structure and metadata:
 
 ```bash
 # Run official hackathon validator
@@ -179,43 +169,34 @@ Checking: submissions/bakebox-choco-ai
 ALL VALIDATION CHECKS PASSED.
 ```
 
-### Verification Test Scenarios
-1. **Cake Recommendation Intent:** Query *"Show me red velvet cake for anniversary"* → Returns **EXACTLY 3 verified cake cards** (`BB-RED-02-1kg`, `BB-RED-05-1kg`, `BB-RED-01-1kg`) with ₹649 price and verified local image paths.
-2. **Live Order Status Tracking:** Query *"Status of order #1002"* → Queries `BB_ORDERS` in IBM Db2, reports **BAKING** at Khatoti Kua kitchen, and suppresses product cards (`ui_cards: []`).
-3. **Store Guidelines & Advisory:** Query *"Patties ko reheat kaise karna chahiye?"* → Advises warming on a dry tawa for 2-3 minutes, never microwave.
-
 ---
 
-## Screenshots & Demo
+## Demo & Links
 
-- **Video Walkthrough (YouTube):** [Watch BAKEBOX Demo on YouTube](https://youtu.be/MvH82OEsDUA?si=ls0FZOuDwLTDWvQO)
-- **LinkedIn Project Announcement:** [View Hackathon Post on LinkedIn](https://lnkd.in/p/gtXgu6wq)
-- **LinkedIn Profile:** [Ayush Dhangar on LinkedIn](http://www.linkedin.com/in/ayush-dhangar-63b190442)
-- **Live Local Demo:** `http://127.0.0.1:3000`
-- **FastAPI Interactive Docs:** `http://127.0.0.1:8000/docs`
-- **Visual Assets in `docs/screenshots/`:**
-  - Architecture data flow diagram
-  - CHOCO AI interactive chat modal with 3-cake precision cards
-  - Cart drawer with live thumbnails and "Ask CHOCO" action
-  - Cake Details & Master Baker Advisory Panel
-  - Terminal logs demonstrating successful `DB2LlamaVS` ingestion and hybrid retrieval
+- **Demo Video (YouTube):** [https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV](https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV)
+- **LinkedIn Post:** [https://lnkd.in/p/gtXgu6wq](https://lnkd.in/p/gtXgu6wq)
+- **Source Repository:** [https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission](https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission)
 
 ---
 
 ## Known Limitations & Future Roadmap
-
-- **Current Limitations:** Vector embeddings currently run on CPU; GPU acceleration can further minimize initial ingestion latency.
+- **Current Limitations:** Vector embeddings currently run on CPU; GPU acceleration can further reduce batch embedding latency.
 - **Future Roadmap:**
-  - Multi-branch kitchen load balancing across Mathura, Vrindavan, and Govardhan branches.
-  - Native integration with IBM watsonx.ai Granite 3.0 foundation models.
+  - **Inbuilt Payment & Checkout:** Direct UPI/Card gateway integration with instant digital invoices and live order status updates in IBM Db2 (`BB_ORDERS`).
+  - **Ultra-Fast Query Engine:** Multi-tier caching on top of IBM Db2 native vector retrieval for sub-100ms catalog and product query responses.
+  - **Multi-Branch Kitchen Balancing:** Real-time order routing and kitchen workload balancing across Mathura, Vrindavan, and Govardhan branches based on oven capacity.
+  - **Predictive Inventory Forecasting:** AI-driven demand forecasting on historical Db2 order data to optimize daily fresh baking and reduce ingredient waste.
 
 ---
 
 ## Team Members & Credits
 
-| Name | GitHub Handle | Email | Role / Contribution |
-|---|---|---|---|
-| Ayush Dhangar | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | ayush.dhangar2024@glbajgroup.org | Full-Stack Architect, IBM Db2 Integration, Hybrid RAG Pipeline |
-| Shri Ram Baker | Partner Domain | Mathura, UP | Bakery Domain Knowledge, Recipes, Catalog & Operational Policies |
+| Name | GitHub Handle | Role / Contribution |
+|---|---|---|
+| Ayush Dhangar | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML, 4th Year · Ex-Intern Pantech Prolab Pvt Ltd · Full-Stack Architect, IBM Db2 Integration, Hybrid RAG Pipeline |
 
-*IBM Db2 TechX Summit 2026 (Db2Hack)*
+---
+
+## License
+
+Distributed under the MIT License. Built for the IBM Db2 TechX Summit 2026.
