@@ -19,8 +19,8 @@ except ImportError as e:
 DB2_HOST = os.getenv("DB2_HOST", "127.0.0.1")
 DB2_PORT = os.getenv("DB2_PORT", "50000")
 DB2_DATABASE = os.getenv("DB2_DATABASE", "IBMDB201")
-DB2_USER = os.getenv("DB2_USER", "dbayush")
-DB2_PASSWORD = os.getenv("DB2_PASSWORD", "8844")
+DB2_USER = os.getenv("DB2_USER")
+DB2_PASSWORD = os.getenv("DB2_PASSWORD")
 
 def get_connection_string() -> str:
     """Build standard IBM Db2 TCPIP connection string."""
