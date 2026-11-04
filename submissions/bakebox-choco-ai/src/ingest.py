@@ -245,10 +245,8 @@ def run_ingestion():
 
         # Step 4: Ingest into IBM Db2 via DB2LlamaVS
         print("\nStep 4: Ingesting into IBM Db2 native vector table 'BB_CHUNKS_VECTOR' via DB2LlamaVS...")
-        try:
-            execute_dml(conn, "DROP TABLE BB_CHUNKS_VECTOR")
-        except Exception:
-            pass
+        
+       # Preserve existing vector table; let DB2LlamaVS manage table initialization.
         vs = BakeboxDb2VectorStore(
             table_name="BB_CHUNKS_VECTOR",
             embed_dim=384,
