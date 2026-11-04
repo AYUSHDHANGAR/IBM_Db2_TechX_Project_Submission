@@ -6,13 +6,22 @@ Demonstrates native VECTOR column handling (vector(dim, FLOAT32)) and in-engine 
 import logging
 from typing import Optional
 
-from llama_index.core.schema import TextNode
-from llama_index.core.vector_stores.types import (
-    VectorStoreQuery,
-    VectorStoreQueryResult,
-    MetadataFilters
-)
-from llama_index.vector_stores.db2 import DB2LlamaVS, DistanceStrategy
+try:
+    from llama_index.core.schema import TextNode
+    from llama_index.core.vector_stores.types import (
+        VectorStoreQuery,
+        VectorStoreQueryResult,
+        MetadataFilters
+    )
+    from llama_index.vector_stores.db2 import DB2LlamaVS, DistanceStrategy
+except ImportError:
+    TextNode = None
+    VectorStoreQuery = None
+    VectorStoreQueryResult = None
+    MetadataFilters = None
+    DB2LlamaVS = None
+    class DistanceStrategy:
+        COSINE = "COSINE"
 
 from src.db import get_dbi_connection
 
@@ -69,3 +78,11 @@ class BakeboxDb2VectorStore:
     def delete_document(self, doc_id: str):
         """Remove a document and its vector embeddings from IBM Db2."""
         return self.vs.delete(doc_id)
+
+    def close(self):
+        """Safely close the underlying Db2 database connection."""
+        if self.connection:
+            try:
+                self.connection.close()
+            except Exception:
+                pass

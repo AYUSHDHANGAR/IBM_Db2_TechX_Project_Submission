@@ -1,112 +1,106 @@
 # System Architecture: BAKEBOX-AI — AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT
-## CHOCO AI: Hybrid RAG System on IBM Db2
+## CHOCO AI: Advanced Hybrid RAG System on IBM Db2
 
 **Event:** IBM Db2 TechX Summit 2026 • GL Bajaj Group of Institutions, Mathura (Db2Hack Dev Hacks)  
 **Project Slug:** `submissions/bakebox-choco-ai`  
-**Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR)) · BTech CSE-AIML, 4th Year · Ex-Intern Pantech Prolab Pvt Ltd  
-**Frameworks:** LlamaIndex, `llama-index-vector-stores-db2` (`DB2LlamaVS`), IBM Db2 (`ibm_db_dbi`), FastAPI
+**Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR)) · BTech CSE-AIML, 4th Year · AI Systems & Db2 Solutions Architect  
+**Frameworks:** LlamaIndex, `llama-index-vector-stores-db2` (`DB2LlamaVS`), IBM Db2 (`ibm_db`, `ibm_db_dbi`), scikit-learn, Google Gemini
 
 ---
 
 ## 1. Dual-Perspective Architecture Overview
 
-BAKEBOX-AI is designed to solve challenges from **two perspectives simultaneously** — the end customer and the bakery management:
+BAKEBOX-AI is designed to solve operational and communication challenges from **two perspectives simultaneously** — the customer and bakery management:
 
 ### Customer-Facing Pain Points Addressed:
-- **Information Hesitation:** Customers frequently hesitate or feel awkward asking detailed questions about product specs, precise ingredients, allergen details, custom sizing, or tailored cake recommendations.
-- **Operational & Discount Blind Spots:** Real-time order status tracking, delivery updates, account balances, and available discounts are often locked behind clunky interfaces or delayed support. Furthermore, customers miss out on great active coupons or ideal product suggestions simply because they aren't visible or proactively recommended.
-- **Customer Care Availability Gaps:** Live customer support drops off drastically after 9 PM, leaving late-night craving inquiries, urgent modifications, and order tracking completely unaddressed.
+- **Information Hesitation:** Customers frequently hesitate or feel awkward asking detailed questions about product specs, ingredients, allergen details, custom sizing, or base recommendations (e.g. Khoaa Eggless).
+- **Operational & Tracking Blind Spots:** Real-time order status tracking, delivery updates, and fresh baking wait times are often locked behind phone calls or delayed support.
+- **Customer Care Availability Gaps:** Live customer support drops off drastically after 9 PM, leaving late-night craving inquiries, urgent modifications, and order tracking unaddressed.
 
 ### Management & Business-Facing Pain Points Addressed:
-- **Lost Sales & Conversion Bottlenecks:** Because human customer support agents are unavailable after hours or overwhelmed during peak times, businesses fail to capture high-intent late-night orders and inquiries.
-- **Missed Upselling Opportunities:** Traditional menus and static interfaces cannot proactively recommend the right cake or apply the best available coupons based on a customer's specific preference or budget, resulting in missed revenue.
-- **Operational Inefficiencies:** Managing inquiries about inventory, active coupons, and order statuses manually drains staff bandwidth and increases response latency.
+- **Lost Sales & Conversion Bottlenecks:** Because human customer support agents are unavailable after hours or overwhelmed during peak times, bakeries fail to capture high-intent inquiries and late-night orders.
+- **Missed Upselling Opportunities:** Static menus cannot proactively recommend matching cakes or suggest appropriate base customizers according to the customer's specific celebration.
+- **Operational Inefficiencies:** Manually answering repetitive inquiries about baking wait times, patty reheating instructions, and order status drains staff bandwidth.
 
 ### How CHOCO AI Bridges Both Perspectives:
-
-**For the User (Seamless, Hesitation-Free Experience):**
-- Instant 24/7 Access — available around the clock (even post-9 PM) for late-night queries, live order tracking, and account balance checks.
-- Personalized Product & Coupon Discovery — CHOCO AI actively suggests the best-fit cakes and ensures customers never miss out on active coupons or discounts.
-- Rich, Interactive Responses — agentic tools render structured JSON for interactive product cards and recommendations (supporting both Hindi and English).
-
-**For the Management (Automated Operations & Scalability):**
-- Autonomous 24/7 Conversion Engine — acts as an around-the-clock sales and support agent, capturing leads and answering inquiries even when physical shop operations or human support teams are offline.
-- Intelligent Data Retrieval — automatically queries the hybrid database (relational tables and PDFs via IBM DB2) to fetch exact product data, inventory status, and user records instantly.
-- Zero Data Compromise — built with strict session isolation and dedicated buffer memory to ensure user safety, data privacy, and secure business operations at all times.
+- **Instant 24/7 Access:** Available around the clock for late-night queries, live order tracking, and cake discovery.
+- **Personalized Product Guidance:** Suggests up to 3 best-fit cakes based on semantic flavor preference and celebration type.
+- **Agentic Ground-Truth Retrieval:** Direct transactional queries to IBM Db2 relational tables provide exact order status reports, eliminating hallucinations.
+- **Bilingual Interaction:** Native support for bilingual Hindi and English phrasing to match local customer demographics.
 
 ---
 
 ## 2. High-Level System Architecture
 
-BAKEBOX bridges traditional enterprise relational data with advanced AI retrieval by leveraging **IBM Db2** simultaneously as:
-1. **A Native High-Dimensional Vector Store:** Utilizing Db2 native `vector` columns and hardware-accelerated similarity search via `DB2LlamaVS`.
-2. **A Relational Transactional Database:** Housing real-time customer orders, order line items, customized cake bases, and store working agreements.
+BAKEBOX bridges traditional enterprise relational data with modern AI retrieval by leveraging **IBM Db2** simultaneously as:
+1. **A Native High-Dimensional Vector Store:** Utilizing Db2 native `vector(384, FLOAT32)` columns and hardware-accelerated similarity search via `DB2LlamaVS`.
+2. **A Relational Transactional Database:** Housing real-time customer orders, order line items, customized cake bases, and store operational agreements under ACID guarantees.
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client & User Layer"]
+    subgraph Client ["Client & Session Layer"]
         User["Customer / Store Operator"]
+        Session["Session ID & Session Isolation"]
         Query["Query: 'Show me red velvet cakes' OR 'Status of order #1002'"]
     end
 
-    subgraph Orchestration ["LlamaIndex Orchestration Engine"]
-        Engine["ChocoQueryEngine (query_engine.py)"]
-        IntentRouter{"Intent Classification"}
-        HybridRetriever["Db2HybridRRFRetriever (retriever.py)"]
-        RRF["Reciprocal Rank Fusion (k=60)"]
+    subgraph Orchestration ["LlamaIndex Orchestration & Memory"]
+        Engine["ChocoQueryEngine (src/query_engine.py)"]
+        BufferMem["SessionBufferMemory (Conversation History Buffer)"]
+        Dispatcher{"Agentic Tool Dispatcher"}
+        
+        ToolRec["Agentic Tool 1: recommend_cakes()\n(Renders UP TO 3 JSON Cards via Cosine Similarity)"]
+        ToolOrder["Agentic Tool 2: track_live_order()\n(Real-Time Backend ACID Order Lookup)"]
+        ToolPolicy["Agentic Tool 3: get_store_policy_or_advisory()\n(Domain Knowledge Retrieval)"]
+        
+        HybridRetriever["Db2HybridRRFRetriever (src/retriever.py)"]
+        RRF["3-Way Reciprocal Rank Fusion (k=60)\nDb2 Dense + BM25 Lexical + TF-IDF Lexical"]
     end
 
     subgraph IBM_Db2 ["IBM Db2 Engine (IBMDB201 / localhost:50000)"]
         subgraph VectorStore ["Native Vector Tables (DB2LlamaVS)"]
-            BB_VECTORS[("BB_CHUNKS_VECTOR: id, doc_id, embedding vector, metadata, text")]
+            BB_VECTORS[("BB_CHUNKS_VECTOR\nid, doc_id, embedding vector(384, FLOAT32), metadata, text")]
         end
-        subgraph RelationalStore ["Transactional Relational Tables"]
-            BB_ORDERS[("BB_ORDERS: order_id, customer_name, order_status, total_amount")]
-            BB_ORDER_ITEMS[("BB_ORDER_ITEMS: sku_id, item_name, quantity, cake_base")]
+        subgraph RelationalStore ["Transactional Relational Tables (ACID)"]
+            BB_ORDERS[("BB_ORDERS\norder_id, customer_name, order_status, total_amount, delivery_address")]
+            BB_ORDER_ITEMS[("BB_ORDER_ITEMS\nsku_id, item_name, quantity, unit_price, cake_base, cake_weight")]
         end
     end
 
-    subgraph ResponseGen ["Response Synthesis & AI Tool Calling"]
-        Cards["Strict 3-Cake JSON Selection (SKU, Image, Price)"]
-        OrderReport["Ground-Truth Live Order Status (No Hallucination)"]
+    subgraph Generation ["Synthesis Engine"]
+        LLM["Google Gemini 3.8 Flash (or Deterministic Fallback)"]
+        Cards["Up to 3 Structured Cake JSON Cards"]
+        OrderReport["Verified Real-Time Backend Order Status Report"]
     end
 
-    User --> Query
+    User --> Session --> Query
     Query --> Engine
-    Engine --> IntentRouter
+    Engine --> BufferMem
+    BufferMem --> Dispatcher
     
-    IntentRouter -- "Order Tracking Intent" --> BB_ORDERS
+    Dispatcher -- "Order Tracking Intent" --> ToolOrder
+    ToolOrder --> BB_ORDERS
     BB_ORDERS --> BB_ORDER_ITEMS
     BB_ORDER_ITEMS --> OrderReport
 
-    IntentRouter -- "Recommendation Intent" --> HybridRetriever
-    HybridRetriever -- "Dense Semantic Search" --> BB_VECTORS
-    HybridRetriever -- "Sparse Lexical Search" --> RRF
+    Dispatcher -- "Recommendation Intent" --> ToolRec
+    ToolRec --> HybridRetriever
+    HybridRetriever -- "1. Dense Cosine Distance" --> BB_VECTORS
+    HybridRetriever -- "2. Sparse Okapi BM25" --> RRF
+    HybridRetriever -- "3. Sparse Scikit TF-IDF" --> RRF
     RRF --> Cards
 
-    OrderReport --> User
-    Cards --> User
+    Dispatcher -- "Policy / Advisory Intent" --> ToolPolicy
+    ToolPolicy --> HybridRetriever
+
+    Cards --> LLM
+    OrderReport --> LLM
+    LLM --> User
 ```
 
 ---
 
-## 3. Technical Architecture & Tech Stack
-
-The architecture is built for high performance, precision retrieval, and zero-cost local embedding generation to handle real-time inventory updates without latency.
-
-- **Database & Storage:** IBM DB2 (managed via the VS Code extension), utilizing a hybrid database structure that unifies both unstructured documents (PDFs) and structured relational tables.
-- **Backend Framework:** FastAPI microservices architecture delivering high-throughput, asynchronous API endpoints.
-- **Frontend:** React 18 + Vite providing a highly responsive, clean, and interactive user interface optimized for fast interaction.
-- **AI & RAG Pipeline:**
-  - **Orchestration Framework:** LlamaIndex configured to build robust, end-to-end ingestion and query pipelines.
-  - **Retrieval Strategy:** Advanced RAG utilizing Reciprocal Rank Fusion (RRF) combined with fixed-size chunking (where individual nodes represent precise table rows or document sections) to guarantee pin-point retrieval accuracy across dynamic product inventories.
-  - **Embeddings:** Hugging Face (BAAI/bge-large) model running locally/freely for rapid embedding generation. This bypasses external API rate limits and costs, ensuring newly added cakes or products are embedded and searchable instantly.
-  - **LLM Engine:** Gemini 3.8 Flash powering fast, cost-effective, and intelligent text generation and reasoning.
-  - **Vector Operations:** IBM DB2 Vector Store integration via `DB2LlamaVS` for efficient similarity search across the hybrid database.
-
----
-
-## 4. IBM Db2 Native Vector Column Utilization
+## 3. IBM Db2 Native Vector Column Utilization
 
 ### Official `DB2LlamaVS` Table Schema
 The table `BB_CHUNKS_VECTOR` is initialized and managed directly via `llama-index-vector-stores-db2`:
@@ -115,7 +109,7 @@ The table `BB_CHUNKS_VECTOR` is initialized and managed directly via `llama-inde
 CREATE TABLE BB_CHUNKS_VECTOR (
     id VARCHAR(64) PRIMARY KEY NOT NULL,
     doc_id VARCHAR(64),
-    embedding vector,   -- IBM Db2 Native Vector Datatype
+    embedding vector(384, FLOAT32),   -- IBM Db2 Native Vector Datatype
     node_info BLOB,
     metadata BLOB,
     text CLOB
@@ -124,55 +118,56 @@ CREATE TABLE BB_CHUNKS_VECTOR (
 
 ### In-Engine Vector Distance Search
 When `BakeboxDb2VectorStore.query()` is invoked, IBM Db2 executes cosine distance calculations internally:
-$$\text{Cosine Similarity}(A, B) = \frac{A \cdot B}{\|A\|_2 \|B\|_2}$$
+$$\text{Cosine Distance}(A, B) = 1 - \frac{A \cdot B}{\|A\|_2 \|B\|_2}$$
 
 This in-engine hardware acceleration avoids fetching raw vectors to application memory, drastically reducing network I/O and latency.
 
 ---
 
-## 5. Hybrid Reciprocal Rank Fusion (RRF) Retrieval
+## 4. Advanced 3-Way Hybrid RAG (Dense Db2 + BM25 + TF-IDF)
 
-While pure vector search captures general semantic intent, e-commerce queries often demand strict lexical precision (e.g. distinguishing `"1kg"` from `"0.5kg"` or `"Khoaa Eggless"` from standard cakes).
+While dense vector search captures conceptual semantics, e-commerce queries often demand strict lexical precision (e.g. distinguishing `"1kg"` from `"0.5kg"` or `"Khoaa Eggless"` from standard cakes).
 
-Our custom `Db2HybridRRFRetriever` solves this by fusing two independent retrieval channels:
+Our custom `Db2HybridRRFRetriever` fuses three independent retrieval channels:
 1. **Dense Retrieval:** Native similarity ranking $R_{\text{dense}}$ from IBM Db2 `DB2LlamaVS`.
-2. **Sparse Lexical Retrieval:** Exact token TF-IDF ranking $R_{\text{sparse}}$ across catalog titles and descriptions.
+2. **Sparse Lexical Retrieval A (BM25):** Term frequency and document frequency ranking $R_{\text{bm25}}$ via Okapi BM25.
+3. **Sparse Lexical Retrieval B (TF-IDF):** Sub-linear token matching $R_{\text{tfidf}}$ across product names and descriptions.
 
 The reciprocal rank fusion score for document $d$ is computed as:
-$$\text{RRF Score}(d) = \frac{1}{60 + R_{\text{dense}}(d)} + \frac{1}{60 + R_{\text{sparse}}(d)}$$
+$$\text{RRF Score}(d) = \frac{1}{60 + R_{\text{dense}}(d)} + \frac{1}{60 + R_{\text{bm25}}(d)} + \frac{1}{60 + R_{\text{tfidf}}(d)}$$
 
 Candidates are sorted by fused score, guaranteeing both conceptual relevance and exact keyword precision.
 
 ---
 
-## 6. Relational Transactional Ground Truth (`BB_ORDERS`)
+## 5. Session Isolation & Buffer Memory
+
+To guarantee enterprise data privacy and conversation continuity:
+- **`SessionBufferMemory`:** Each user interaction runs under a dedicated `session_id`.
+- **Sliding-Window Buffer:** Conversation turns (user message, intent, assistant reply) are retained within an isolated sliding window, ensuring multi-turn dialogue context is maintained without cross-session contamination.
+
+---
+
+## 6. Real-Time Backend Order Status (Agentic Tool 2)
 
 To eliminate AI hallucinations in customer service, CHOCO AI directly queries transactional relational tables when an order inquiry is detected:
 
 ```sql
 SELECT O.order_id, O.customer_name, O.order_status, O.delivery_address, 
-       I.item_name, I.cake_base, I.cake_weight
+       I.item_name, I.cake_base, I.cake_weight, I.quantity
 FROM BB_ORDERS O
 JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
 WHERE O.order_id = ?;
 ```
 
-If an active order is found in `BAKING` status at the Khatoti Kua kitchen, CHOCO returns exact status details and suppresses product recommendation cards (`ui_cards: []`).
+If an active order is found in `BAKING` status at the Khatoti Kua kitchen, CHOCO returns exact status details from the database without invoking generative speculation.
 
 ---
 
-## 7. Strict 3-Cake Precision Recommendation (AI Tool Calling)
+## 7. Up to 3 Cake Cards Recommendation (Agentic Tool 1)
 
-When recommendation intent is confirmed (e.g., *"show me red velvet cake"*), the engine enforces the **Strict 3-Cake Selection Rule**:
-- Exactly 3 distinct cake cards matching the requested flavor and category are returned.
+When recommendation intent is confirmed (e.g., *"show me red velvet cake"*), the engine enforces the **Up to 3 Cake Selection Rule**:
+- Evaluates candidate cakes retrieved by the hybrid RRF engine against a cosine similarity threshold.
+- Returns **up to 3** (not a hardcoded fixed 3) distinct cake cards that genuinely match the requested flavor and occasion.
 - Each card contains verified database attributes: `sku_id`, `name`, `price`, `flavor`, `weight_kg`, and authentic image path.
-- The React + Vite frontend renders these structured cards directly with an interactive **"Add to Cart"** action.
-
----
-
-## 8. Key Architectural Highlights
-
-- **Hybrid Data Handling:** Seamlessly queries across structured relational tables (inventory, balances, order statuses) and unstructured documents (manuals, policy PDFs) using IBM DB2.
-- **Zero-Latency Ingestion:** Local free embedding generation allows instant indexing of newly added bakery products without depending on external embedding services.
-- **Rich UI Rendering:** Agentic tool responses output structured JSON, allowing the React + Vite frontend to render visually engaging product cards and suggestions instantly.
-- **Bilingual Capability:** Native support for both Hindi and English interactions to match local customer demographics seamlessly.
+- If only 1 or 2 cakes match the criteria, exactly 1 or 2 cards are returned, preserving catalog integrity.

@@ -1,13 +1,14 @@
 """
-Data Ingestion Pipeline for BAKEBOX Choco AI.
+Data Ingestion Pipeline for BAKEBOX Choco AI on IBM Db2.
 Sets up:
-1. IBM Db2 Relational Tables: BB_ORDERS & BB_ORDER_ITEMS
-2. IBM Db2 Vector Table via DB2LlamaVS (BB_CHUNKS_VECTOR with native vector(384, FLOAT32))
-3. Pre-computes and ingests bakery cakes, store policies, and heating rules.
+1. IBM Db2 Relational Tables: BB_ORDERS & BB_ORDER_ITEMS (ACID transactional order records)
+2. IBM Db2 Native Vector Table: BB_CHUNKS_VECTOR via DB2LlamaVS (vector(384, FLOAT32))
+3. Pre-computes and ingests domain knowledge chunks (cakes, store agreements, heating advisories).
 """
 import os
 import sys
 import json
+
 try:
     from fastembed import TextEmbedding
     HAS_FASTEMBED = True
@@ -18,14 +19,20 @@ except ImportError:
     except ImportError:
         pass
 
-from llama_index.core.schema import TextNode, NodeRelationship, RelatedNodeInfo
-from llama_index.vector_stores.db2 import DistanceStrategy
+try:
+    from llama_index.core.schema import TextNode, NodeRelationship, RelatedNodeInfo
+    from llama_index.vector_stores.db2 import DistanceStrategy
+except ImportError:
+    TextNode = None
+    NodeRelationship = None
+    RelatedNodeInfo = None
+    DistanceStrategy = None
 
 from src.db import get_dbi_connection, execute_dml, execute_query
-from src.vector_store import BakeboxDb2VectorStore
+# vector_store is imported inside run_ingestion() to allow importing sample docs standalone
 
 def init_relational_tables(conn):
-    """Create relational order tables in IBM Db2."""
+    """Create relational transactional order tables in IBM Db2."""
     print("Step 1: Setting up IBM Db2 Relational Tables (BB_ORDERS & BB_ORDER_ITEMS)...")
     
     # BB_ORDERS Table
@@ -46,7 +53,7 @@ def init_relational_tables(conn):
     try:
         execute_dml(conn, orders_sql)
         print("  -> Table BB_ORDERS created successfully.")
-    except Exception as e:
+    except Exception:
         print("  -> Table BB_ORDERS already exists or was retained.")
 
     # BB_ORDER_ITEMS Table
@@ -66,33 +73,43 @@ def init_relational_tables(conn):
     try:
         execute_dml(conn, items_sql)
         print("  -> Table BB_ORDER_ITEMS created successfully.")
-    except Exception as e:
+    except Exception:
         print("  -> Table BB_ORDER_ITEMS already exists or was retained.")
 
-    # Insert sample ground-truth orders for testing
-    check_order = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_ORDERS WHERE order_id = 1002")
-    if not check_order or check_order[0]["CNT"] == 0:
-        execute_dml(
-            conn,
-            """
-            INSERT INTO BB_ORDERS 
-            (order_id, user_id, customer_name, customer_phone, order_type, order_status, total_amount, delivery_address, special_notes)
-            VALUES (1002, 3, 'Rahul Sharma', '+91 9876543210', 'DELIVERY', 'BAKING', 649.00, 'Krishna Nagar, Mathura', '1st Anniversary Celebration')
-            """
-        )
-        execute_dml(
-            conn,
-            """
-            INSERT INTO BB_ORDER_ITEMS 
-            (order_id, sku_id, item_name, quantity, unit_price, cake_base, cake_weight, custom_message)
-            VALUES (1002, 'BB-RED-02-1kg', 'Red Velvet Heart Special', 1, 649.00, 'Khoaa (Eggless)', '1.0kg', 'Happy 1st Anniversary')
-            """
-        )
-        print("  -> Seeded demo active order #1002 for 'Rahul Sharma' (Status: BAKING at Khatoti Kua kitchen).")
+    # Db2 Relational Indexes for Accelerated Query Optimization
+    try:
+        execute_dml(conn, "CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone)")
+        execute_dml(conn, "CREATE INDEX IDX_BB_ITEM_ORDER ON BB_ORDER_ITEMS(order_id)")
+        print("  -> Performance indexes (IDX_BB_ORDER_PHONE, IDX_BB_ITEM_ORDER) created.")
+    except Exception:
+        pass
 
+    # Insert sample ground-truth demo order for testing
+    try:
+        check_order = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_ORDERS WHERE order_id = 1002")
+        if not check_order or check_order[0]["CNT"] == 0:
+            execute_dml(
+                conn,
+                """
+                INSERT INTO BB_ORDERS 
+                (order_id, user_id, customer_name, customer_phone, order_type, order_status, total_amount, delivery_address, special_notes)
+                VALUES (1002, 3, 'Rahul Sharma', '+91 9876543210', 'DELIVERY', 'BAKING', 649.00, 'Krishna Nagar, Mathura', '1st Anniversary Celebration')
+                """
+            )
+            execute_dml(
+                conn,
+                """
+                INSERT INTO BB_ORDER_ITEMS 
+                (order_id, sku_id, item_name, quantity, unit_price, cake_base, cake_weight, custom_message)
+                VALUES (1002, 'BB-RED-02-1kg', 'Red Velvet Heart Special', 1, 649.00, 'Khoaa (Eggless)', '1.0kg', 'Happy 1st Anniversary')
+                """
+            )
+            print("  -> Seeded demo active order #1002 for 'Rahul Sharma' (Status: BAKING at Khatoti Kua kitchen).")
+    except Exception as e:
+        print(f"  -> Order seeding status: {e}")
 
 def get_sample_bakery_documents():
-    """Returns essential domain knowledge chunks for Shri Ram Baker (Mathura)."""
+    """Returns curated domain knowledge chunks for Shri Ram Baker (Mathura)."""
     return [
         {
             "id": "CAKE_BB-RED-01-1kg",
@@ -202,7 +219,6 @@ def get_sample_bakery_documents():
         }
     ]
 
-
 def run_ingestion():
     """Main execution of the ingestion pipeline."""
     print("==================================================================")
@@ -214,7 +230,7 @@ def run_ingestion():
         # Step 1: Initialize Relational Tables
         init_relational_tables(conn)
 
-        # Step 2: Initialize Embedding Model
+        # Step 2: Initialize Embedding Model (BAAI/bge-small-en-v1.5, 384 dims)
         model_name = "BAAI/bge-small-en-v1.5"
         print(f"\nStep 2: Loading HuggingFace Embedding Model '{model_name}'...")
         if HAS_FASTEMBED:
@@ -245,8 +261,7 @@ def run_ingestion():
 
         # Step 4: Ingest into IBM Db2 via DB2LlamaVS
         print("\nStep 4: Ingesting into IBM Db2 native vector table 'BB_CHUNKS_VECTOR' via DB2LlamaVS...")
-        
-       # Preserve existing vector table; let DB2LlamaVS manage table initialization.
+        from src.vector_store import BakeboxDb2VectorStore
         vs = BakeboxDb2VectorStore(
             table_name="BB_CHUNKS_VECTOR",
             embed_dim=384,
