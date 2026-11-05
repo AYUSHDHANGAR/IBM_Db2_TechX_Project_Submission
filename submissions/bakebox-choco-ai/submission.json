@@ -5,8 +5,8 @@
     "slug": "bakebox-choco-ai",
     "short_description": "Enterprise autonomous AI bakery management and customer engagement platform powered by CHOCO AI — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via DB2LlamaVS), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: k=60), session isolation with conversation buffer memory, and real-time agentic tools for up-to-3 cake precision recommendations and live order tracking.",
     "category": "AI / RAG / Data Engineering / Analytics",
-    "demo_url": "https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV",
-    "video_url": "https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV",
+    "demo_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
+    "video_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
     "linkedin_post": "https://lnkd.in/p/gtXgu6wq",
     "repo_url": "https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission"
   },

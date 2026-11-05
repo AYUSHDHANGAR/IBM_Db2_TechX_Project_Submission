@@ -54,6 +54,15 @@ class BakeboxDb2VectorStore:
             embed_dim=self.embed_dim
         )
 
+    def close(self):
+        """Explicitly cleans up and closes the underlying Db2 connection."""
+        if hasattr(self, 'connection') and self.connection:
+            try:
+                self.connection.close()
+                logger.info("Db2 vector store connection closed cleanly.")
+            except Exception as e:
+                logger.warning(f"Error closing Db2 vector store connection: {e}")
+
     def add_nodes(self, nodes: list[TextNode]):
         """Ingest TextNode objects with pre-computed vector embeddings into Db2."""
         return self.vs.add(nodes)

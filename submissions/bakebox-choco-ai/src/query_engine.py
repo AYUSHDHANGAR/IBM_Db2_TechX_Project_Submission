@@ -5,7 +5,7 @@ Demonstrates:
 2. Agentic Tool 2: track_live_order (Real-time backend ACID order tracking from Db2 BB_ORDERS & BB_ORDER_ITEMS)
 3. Agentic Tool 3: get_store_policy_or_advisory (Advanced Hybrid RAG: Db2 Native Vectors + BM25 + TF-IDF)
 4. Session Isolation & Buffer Memory: Per-user conversation buffer memory isolated by session_id.
-5. AI Synthesis Engine: Google Gemini Flash LLM (Gemini 3.8 Flash) with deterministic ground-truth fallback (--no-llm).
+5. AI Synthesis Engine: Google Gemini 1.5 Flash LLM (gemini-1.5-flash) with deterministic ground-truth fallback (--no-llm).
 """
 import os
 import sys
@@ -101,7 +101,7 @@ class ChocoQueryEngine:
     - Session Isolation: Each session maintains an independent Buffer Memory.
     - Advanced Hybrid RAG: Db2 Native Vectors + BM25 + TF-IDF with 3-way RRF (k=60).
     - Agentic Tool Calling: Up to 3 Cake Cards via Cosine Similarity + Live Backend Order Tracking.
-    - Gemini 3.8 Flash LLM: Powered by Google Gemini with deterministic ground-truth fallback.
+    - Gemini 1.5 Flash LLM: Powered by Google Gemini with deterministic ground-truth fallback.
     """
     def __init__(self, use_llm: bool = True):
         print("Initializing BAKEBOX Choco Query Engine with IBM Db2 & LlamaIndex...")
@@ -184,23 +184,35 @@ class ChocoQueryEngine:
         return ui_cards
 
     # ==========================================================================
-    # AGENTIC TOOL 2: Real-Time Backend Order Status Check (ID & Phone Accelerated)
+    # AGENTIC TOOL 2: Real-Time Backend Order Status Check with Auth Verification
     # ==========================================================================
     def tool_track_live_order(self, order_id: Optional[int] = None, phone_number: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Agentic Tool 2:
         Executes real-time ACID transactional SQL queries against IBM Db2 relational
-        tables (BB_ORDERS and BB_ORDER_ITEMS) by order_id or customer_phone.
-        Utilizes Db2 B-tree indexes (IDX_BB_ORDER_PHONE, IDX_BB_ITEM_ORDER) for sub-millisecond retrieval.
+        tables (BB_ORDERS and BB_ORDER_ITEMS).
+        Security: Enforces two-factor verification (order_id + phone number match)
+        to prevent unauthorized enumeration and protect customer data privacy.
         """
         if not order_id and not phone_number:
             return None
 
         conn = get_dbi_connection()
         try:
-            if order_id:
-                sql_order = "SELECT * FROM BB_ORDERS WHERE order_id = ?"
-                order_rows = execute_query(conn, sql_order, (order_id,))
+            if order_id and phone_number:
+                # Dual-factor verification: match order_id AND registered phone
+                clean_phone = phone_number[-10:] if len(phone_number) >= 10 else phone_number
+                sql_order = "SELECT * FROM BB_ORDERS WHERE order_id = ? AND customer_phone LIKE ?"
+                order_rows = execute_query(conn, sql_order, (order_id, f"%{clean_phone}%"))
+                if not order_rows:
+                    # Check if order exists to distinguish between not found vs verification mismatch
+                    check_id = execute_query(conn, "SELECT order_id FROM BB_ORDERS WHERE order_id = ?", (order_id,))
+                    if check_id:
+                        return {"auth_error": "PHONE_MISMATCH", "order_id": order_id}
+                    return None
+            elif order_id and not phone_number:
+                # Security policy: Require phone verification before disclosing order details
+                return {"auth_error": "VERIFICATION_REQUIRED", "order_id": order_id}
             else:
                 clean_phone = phone_number[-10:] if len(phone_number) >= 10 else phone_number
                 sql_order = "SELECT * FROM BB_ORDERS WHERE customer_phone LIKE ? ORDER BY created_at DESC"
@@ -218,16 +230,35 @@ class ChocoQueryEngine:
             conn.close()
 
     # ==========================================================================
-    # AGENTIC TOOL 3: Store Policy & Advisory Retrieval
+    # AGENTIC TOOL 3: Store Policy & Advisory Retrieval (Metadata Filtered)
     # ==========================================================================
     def tool_get_store_policy_or_advisory(self, user_query: str) -> List[str]:
         """
         Agentic Tool 3:
-        Hybrid RRF retrieval (Db2 Vector + BM25 + TF-IDF) for operational policies,
-        baking wait times (standard 3-4 hours), and patty reheating instructions (dry tawa only).
+        Hybrid RRF retrieval strictly metadata-filtered for policy, advisory, and store_info
+        (guaranteeing cake catalog cards do not leak into policy or operational queries).
         """
         retrieved_nodes = self.retriever.retrieve(user_query)
-        return [n.node.text for n in retrieved_nodes[:2]]
+        policy_texts = []
+        for n in retrieved_nodes:
+            m = n.node.metadata or {}
+            node_type = m.get("type", "")
+            # Only accept policy, advisory, or store information chunks
+            if node_type in ["policy", "advisory", "store_info"] or not m.get("sku_id"):
+                policy_texts.append(n.node.text)
+            if len(policy_texts) >= 2:
+                break
+
+        # Fallback if top vector/RRF ranks contained only cakes
+        if not policy_texts and hasattr(self.retriever, 'corpus_nodes'):
+            for n in self.retriever.corpus_nodes:
+                m = n.metadata or {}
+                if m.get("type") in ["policy", "advisory", "store_info"]:
+                    policy_texts.append(n.text)
+                if len(policy_texts) >= 2:
+                    break
+
+        return policy_texts
 
     # ==========================================================================
     # DISPATCHER WITH BUFFER MEMORY & SESSION ISOLATION
@@ -237,7 +268,7 @@ class ChocoQueryEngine:
         Processes user query within an isolated session context:
         - Retrieves dedicated SessionBufferMemory.
         - Routes to proper Agentic Tools (preventing purchase query hijacking).
-        - Synthesizes bilingual reply via Gemini 3.8 Flash (or deterministic fallback).
+        - Synthesizes bilingual reply via Gemini 1.5 Flash (or deterministic fallback).
         - Saves turn to session buffer memory.
         """
         session_memory = self.get_or_create_session(session_id)
@@ -258,19 +289,37 @@ class ChocoQueryEngine:
                 reply = (
                     "Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n"
                     "Aapke order ki live details check karne ke liye, kripya apna 4-digit Order ID number (jaise #1002) "
-                    "ya registered 10-digit mobile number provide karein."
+                    "aur registered mobile number provide karein."
                 )
                 session_memory.add_turn(user_message, reply, "ORDER_TRACKING_PROMPT")
                 return {"reply": reply, "ui_cards": [], "intent": "ORDER_TRACKING_PROMPT", "session_id": session_id}
 
             order = self.tool_track_live_order(order_id=order_id, phone_number=phone_number)
-            if order:
+            
+            # Check security verification barriers
+            if order and order.get("auth_error") == "VERIFICATION_REQUIRED":
+                reply = (
+                    f"Radhe Radhe ji! Customer data privacy & security policy ke mutabiq, Order #{order_id} "
+                    "ka live status access karne ke liye kripya apna registered 10-digit mobile number sath mein provide karein."
+                )
+                session_memory.add_turn(user_message, reply, "ORDER_AUTH_REQUIRED")
+                return {"reply": reply, "ui_cards": [], "intent": "ORDER_AUTH_REQUIRED", "session_id": session_id}
+
+            if order and order.get("auth_error") == "PHONE_MISMATCH":
+                reply = (
+                    f"Radhe Radhe ji! Verification Failed: Diya gaya mobile number Order #{order_id} ke records se match nahi karta. "
+                    "Kripya apna registered mobile number dobara check karein."
+                )
+                session_memory.add_turn(user_message, reply, "ORDER_AUTH_FAILED")
+                return {"reply": reply, "ui_cards": [], "intent": "ORDER_AUTH_FAILED", "session_id": session_id}
+
+            if order and "ORDER_ID" in order:
                 items = order.get("ITEMS", [])
                 item_descs = ", ".join([
                     f"{it.get('QUANTITY', 1)}x {it.get('ITEM_NAME', 'Cake')} ({it.get('CAKE_WEIGHT', '')}, {it.get('CAKE_BASE', '')})"
                     for it in items
                 ])
-                # Privacy-preserving data masking to prevent unauthorized information harvesting
+                # Privacy-preserving data masking
                 cust_name = order.get('CUSTOMER_NAME', 'Customer')
                 masked_name = cust_name[0] + "***" if len(cust_name) > 1 else "Customer"
                 raw_addr = order.get('DELIVERY_ADDRESS', 'Mathura, UP')
@@ -289,12 +338,46 @@ class ChocoQueryEngine:
                 session_memory.add_turn(user_message, reply, "ORDER_TRACKING")
                 return {"reply": reply, "ui_cards": [], "intent": "ORDER_TRACKING", "session_id": session_id}
             else:
-                reply = f"Radhe Radhe ji! Order ID #{order_id} hamare records mein nahi mila. Kripya apna sahi Order ID dobara check karein."
+                reply = f"Radhe Radhe ji! Order details hamare records mein nahi mili. Kripya apna sahi Order ID aur mobile number dobara check karein."
                 session_memory.add_turn(user_message, reply, "ORDER_NOT_FOUND")
                 return {"reply": reply, "ui_cards": [], "intent": "ORDER_NOT_FOUND", "session_id": session_id}
 
-        # 2. Policy & Advisory Intent (Tool 3)
-        advisory_keywords = ["reheat", "tawa", "skillet", "microwave", "policy", "wait time", "location", "branch", "baking time"]
+        # 2. General Inquiry & Store Information Intent (Greetings, Hours, About Us, Snacks)
+        general_keywords = [
+            "who are you", "tum kaun ho", "aap kaun ho", "what is choco", "what is bakebox",
+            "opening hours", "timing", "timing kya hai", "kab khulta", "kab band", "store hours",
+            "history", "about us", "kahan par hai", "branch", "branches", "address",
+            "patty", "patties", "aloo patty", "paneer patty", "namkeen", "snack"
+        ]
+        is_general_query = any(k in q_lower for k in general_keywords)
+
+        if is_general_query:
+            policy_texts = self.tool_get_store_policy_or_advisory(user_message)
+            if self.use_llm:
+                history_ctx = session_memory.get_context_summary()
+                prompt = (
+                    f"You are CHOCO AI, the autonomous master baker & store assistant for Shri Ram Baker (Mathura).\n"
+                    f"Conversation History:\n{history_ctx}\n\n"
+                    f"Verified Store Knowledge from IBM Db2:\n" + "\n".join(policy_texts) + f"\n\n"
+                    f"Customer Question: {user_message}\n"
+                    f"Answer politely and concisely in respectful bilingual Hindi/English."
+                )
+                try:
+                    response = self.model.generate_content(prompt)
+                    reply = response.text
+                except Exception:
+                    reply = "Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n" + "\n\n".join(policy_texts[:2])
+            else:
+                reply = (
+                    "Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n"
+                    + "\n\n".join(policy_texts[:2])
+                    + "\n\nAapko kisi cake, patty ya order ke baare mein aur jankari chahiye toh zaroor batayein!"
+                )
+            session_memory.add_turn(user_message, reply, "GENERAL_INQUIRY")
+            return {"reply": reply, "ui_cards": [], "intent": "GENERAL_INQUIRY", "session_id": session_id}
+
+        # 3. Policy & Advisory Intent (Tool 3)
+        advisory_keywords = ["reheat", "tawa", "skillet", "microwave", "policy", "wait time", "baking time"]
         is_policy_query = any(k in q_lower for k in advisory_keywords)
 
         if is_policy_query:
@@ -322,7 +405,7 @@ class ChocoQueryEngine:
             session_memory.add_turn(user_message, reply, "POLICY_ADVISORY")
             return {"reply": reply, "ui_cards": [], "intent": "POLICY_ADVISORY", "session_id": session_id}
 
-        # 3. Cake Recommendation Intent (Tool 1: Render UP TO 3 Cards via Cosine Similarity)
+        # 4. Cake Recommendation Intent (Tool 1: Render UP TO 3 Cards via RRF Ranking)
         ui_cards = self.tool_recommend_cakes(user_message, limit=3)
 
         if self.use_llm and ui_cards:
@@ -333,7 +416,7 @@ class ChocoQueryEngine:
                 f"Conversation History:\n{history_ctx}\n\n"
                 f"Greet with 'Radhe Radhe ji!' and present these matching fresh cake recommendations retrieved from IBM Db2:\n"
                 f"{card_summary}\n"
-                f"Highlight that all cakes are 100% pure vegetarian (Khoaa Eggless base available) and freshly baked on order (3-4 hours wait time).\n"
+                f"Highlight that authentic Khoaa (Eggless) and Egg-based options are both available based on customer dietary choice, freshly baked on order (3-4 hours wait time).\n"
                 f"Keep tone warm, welcoming, and concise in bilingual Hindi/English.\n"
                 f"Customer Query: {user_message}"
             )
@@ -364,8 +447,8 @@ class ChocoQueryEngine:
             "Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n"
             f"Aapki celebration ke liye hamare paas {len(ui_cards)} fresh live options available hain:\n"
             + "\n".join(card_lines)
-            + "\n\nHamare sabhi cakes 100% pure vegetarian (Khoaa Eggless available) hain "
-            "aur order par live fresh bake kiye jaate hain (standard 3-4 ghante wait time)!"
+            + "\n\nHamare paas 100% Pure Veg (Khoaa Eggless) aur Egg-based dono base options available hain. "
+            "Aap apni dietary preference ke mutabiq order customize kar sakte hain (fresh baking wait time: 3-4 ghante)!"
         )
 
 

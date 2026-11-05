@@ -5,7 +5,7 @@
 
 > [!NOTE]
 > **Hackathon Submission Scope & Repository Structure:**  
-> In accordance with the IBM Db2 TechX submission guidelines, this pull request submission folder (`submissions/bakebox-choco-ai/`) contains the complete, self-contained Python LlamaIndex hybrid RAG pipeline, Db2 vector store, and transactional order integration in `src/` and test suite in `tests/`. The full-stack interactive React 18 Storefront and FastAPI backend server demonstrated in our project screenshots are showcased live in our [YouTube Video Demo](https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV).
+> In accordance with the IBM Db2 TechX submission guidelines, this pull request submission folder (`submissions/bakebox-choco-ai/`) contains the complete, self-contained Python LlamaIndex hybrid RAG pipeline, Db2 vector store, and transactional order integration in `src/` and test suite in `tests/`. The full-stack interactive React 18 Storefront and FastAPI backend server demonstrated in our project screenshots are showcased live in our [YouTube Video Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
 
 ---
 
@@ -15,7 +15,7 @@
 - [2. How CHOCO AI Solves Both Perspectives](#2-how-choco-ai-solves-both-perspectives)
 - [IBM Db2 Integration & Depth](#ibm-db2-integration--depth)
 - [AI & Advanced Hybrid RAG Architecture (BM25 + TF-IDF + Db2 Vectors)](#ai--advanced-hybrid-rag-architecture-bm25--tf-idf--db2-vectors)
-- [Agentic Tools (Cosine Similarity Cards & Real-Time Order Tracking)](#agentic-tools-cosine-similarity-cards--real-time-order-tracking)
+- [Agentic Tools (Hybrid RRF Ranked Cards & Protected Order Tracking)](#agentic-tools-hybrid-rrf-ranked-cards--protected-order-tracking)
 - [Session Isolation & Buffer Memory](#session-isolation--buffer-memory)
 - [Visual Proof & Application Screenshots](#visual-proof--application-screenshots)
 - [Prerequisites](#prerequisites)
@@ -248,7 +248,7 @@ python submissions/bakebox-choco-ai/tests/test_retrieval.py
 ```
 **Expected Output:**
 ```text
-Ran 8 tests in 0.041s
+Ran 12 tests in 0.015s
 OK
 ```
 
@@ -256,7 +256,7 @@ OK
 
 ## Demo & Submission Links
 
-- **Demo Video (YouTube Walkthrough):** [https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV](https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV)
+- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM)
 - **LinkedIn Post:** [https://lnkd.in/p/gtXgu6wq](https://lnkd.in/p/gtXgu6wq)
 - **Source Repository:** [https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission](https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission)
 

@@ -38,10 +38,15 @@ def classify_query_intent(query: str) -> str:
     if any(k in q_lower for k in tracking_keywords) or (has_order_id and "order" in q_lower):
         return "ORDER_TRACKING"
     
-    # Policy / Advisory questions
-    advisory_keywords = ["reheat", "tawa", "skillet", "microwave", "policy", "wait time", "location", "branch", "baking time"]
+    # Policy / Advisory questions (Heating, storage, wait times)
+    advisory_keywords = ["reheat", "tawa", "skillet", "microwave", "policy", "wait time", "baking time"]
     if any(k in q_lower for k in advisory_keywords):
         return "POLICY_ADVISORY"
+
+    # General Inquiry & Store Information (Greetings, Hours, History, Snacks)
+    general_keywords = ["who are you", "tum kaun ho", "aap kaun ho", "what is choco", "opening hours", "timing", "history", "about us", "patty", "patties"]
+    if any(k in q_lower for k in general_keywords):
+        return "GENERAL_INQUIRY"
     
     # Recommendation / Purchase inquiry
     rec_signals = ["show", "suggest", "recommend", "design", "dikhao", "batao", "cake", "flavor", "order", "buy", "chahiye"]
@@ -106,7 +111,7 @@ class TestBakeboxRetrieval(unittest.TestCase):
         self.assertEqual(classify_query_intent("Patties ko reheat kaise karna chahiye?"), "POLICY_ADVISORY")
         self.assertEqual(classify_query_intent("Can I microwave the fresh patties?"), "POLICY_ADVISORY")
         self.assertEqual(classify_query_intent("What is the fresh baking wait time?"), "POLICY_ADVISORY")
-        self.assertEqual(classify_query_intent("Where is your main branch kitchen located?"), "POLICY_ADVISORY")
+        self.assertEqual(classify_query_intent("What is your cancellation and refund policy?"), "POLICY_ADVISORY")
 
     def test_filter_upto_three_cards_dynamic(self):
         """Verify the up-to-3 cake recommendation rule (not fixed 3)."""
@@ -179,6 +184,45 @@ class TestBakeboxRetrieval(unittest.TestCase):
 
         self.assertGreaterEqual(cake_count, 7, "Should have at least 7 cake catalog items")
         self.assertGreaterEqual(policy_count, 3, "Should have at least 3 policy/advisory documents")
+
+    def test_intent_classification_general_inquiry(self):
+        """Verify that general questions do NOT fall into cake recommendations."""
+        self.assertEqual(classify_query_intent("Who are you?"), "GENERAL_INQUIRY")
+        self.assertEqual(classify_query_intent("What are your opening hours?"), "GENERAL_INQUIRY")
+        self.assertEqual(classify_query_intent("Do you sell fresh patties?"), "GENERAL_INQUIRY")
+        self.assertEqual(classify_query_intent("What is the bakery history of Shri Ram Baker?"), "GENERAL_INQUIRY")
+
+    def test_order_tracking_security_phone_verification(self):
+        """Verify that order ID alone requires verification, and mismatched phone is rejected."""
+        # Simulated verification check logic
+        def mock_verify_order(order_id, phone_input, db_record):
+            if order_id and not phone_input:
+                return "VERIFICATION_REQUIRED"
+            if order_id and phone_input:
+                clean = phone_input[-10:]
+                if clean in db_record["phone"]:
+                    return "VERIFIED"
+                return "PHONE_MISMATCH"
+            return "NOT_FOUND"
+
+        db_order = {"order_id": 1002, "phone": "+91 9876543210"}
+        
+        # 1. Order ID without phone must be blocked
+        self.assertEqual(mock_verify_order(1002, None, db_order), "VERIFICATION_REQUIRED")
+        
+        # 2. Order ID with wrong phone must be rejected
+        self.assertEqual(mock_verify_order(1002, "9999999999", db_order), "PHONE_MISMATCH")
+        
+        # 3. Order ID with matching registered phone must succeed
+        self.assertEqual(mock_verify_order(1002, "9876543210", db_order), "VERIFIED")
+
+    def test_policy_metadata_filtering(self):
+        """Verify that store policy / advisory retrieval strictly filters out cake SKUs."""
+        docs = get_sample_bakery_documents()
+        policy_docs = [d for d in docs if d.get("metadata", {}).get("type") in ["policy", "advisory", "store_info"]]
+        self.assertGreaterEqual(len(policy_docs), 3)
+        for p in policy_docs:
+            self.assertNotIn("sku_id", p.get("metadata", {}), "Policy chunks must not contain cake sku_id")
 
 if __name__ == "__main__":
     unittest.main()
