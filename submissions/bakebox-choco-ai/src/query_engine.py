@@ -27,7 +27,7 @@ except ImportError:
 
 # 2. Check for Google Gemini Flash LLM API configuration
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")  # Compatible with Gemini 3.8 Flash
+GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
 HAS_GEMINI = False
 
 if GEMINI_API_KEY and GEMINI_API_KEY not in ["your_gemini_api_key", "your_gemini_api_key_here"]:
@@ -145,21 +145,22 @@ class ChocoQueryEngine:
         return self.sessions[session_id]
 
     # ==========================================================================
-    # AGENTIC TOOL 1: Recommend Cakes (Up to 3 JSON Cards via Cosine Similarity)
+    # AGENTIC TOOL 1: Recommend Cakes (Up to 3 JSON Cards via 3-Way RRF Ranking)
     # ==========================================================================
-    def tool_recommend_cakes(self, user_query: str, min_similarity: float = 0.015, limit: int = 3) -> List[Dict[str, Any]]:
+    def tool_recommend_cakes(self, user_query: str, min_rrf_score: float = 0.015, limit: int = 3) -> List[Dict[str, Any]]:
         """
         Agentic Tool 1:
-        Queries IBM Db2 vector store and returns UP TO 3 matching cake cards recommended
-        by Cosine Similarity and RRF score. Does NOT force a fixed 3 cards if fewer match.
+        Queries IBM Db2 hybrid retrieval pipeline (Dense Vector + BM25 + TF-IDF)
+        and returns UP TO 3 matching cake cards ranked by Reciprocal Rank Fusion (RRF: k=60).
+        Does NOT force a fixed 3 cards if fewer match the min_rrf_score threshold.
         """
         retrieved_nodes = self.retriever.retrieve(user_query)
         ui_cards = []
         seen_skus = set()
 
         for n in retrieved_nodes:
-            # Check score threshold to ensure relevance
-            if n.score is not None and n.score < min_similarity:
+            # Check RRF score threshold (1 / (k + rank)) to ensure retrieval relevance
+            if n.score is not None and n.score < min_rrf_score:
                 continue
 
             m = n.node.metadata or {}
@@ -173,7 +174,7 @@ class ChocoQueryEngine:
                     "weight_kg": m.get("weight_kg", 0.5),
                     "price": m.get("price", 249.0),
                     "image_url": m.get("image_url", ""),
-                    "cosine_similarity_score": round(float(n.score), 4) if n.score else 0.0
+                    "rrf_score": round(float(n.score), 4) if n.score else 0.0
                 })
                 seen_skus.add(sku_id)
 
@@ -269,14 +270,21 @@ class ChocoQueryEngine:
                     f"{it.get('QUANTITY', 1)}x {it.get('ITEM_NAME', 'Cake')} ({it.get('CAKE_WEIGHT', '')}, {it.get('CAKE_BASE', '')})"
                     for it in items
                 ])
+                # Privacy-preserving data masking to prevent unauthorized information harvesting
+                cust_name = order.get('CUSTOMER_NAME', 'Customer')
+                masked_name = cust_name[0] + "***" if len(cust_name) > 1 else "Customer"
+                raw_addr = order.get('DELIVERY_ADDRESS', 'Mathura, UP')
+                addr_parts = [p.strip() for p in raw_addr.split(",") if p.strip()]
+                masked_addr = f"***, {addr_parts[-1]} (Verified & Confidential)" if addr_parts else "Mathura (Verified)"
+
                 reply = (
                     f"Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n"
                     f"Humne aapke order ki live details IBM Db2 se verify kar li hain:\n"
-                    f"• Order ID: #{order['ORDER_ID']} ({order['CUSTOMER_NAME']})\n"
-                    f"• Status: {order['ORDER_STATUS']} (at Bhagel Chaupal, Khatoti Kua kitchen)\n"
+                    f"• Order ID: #{order['ORDER_ID']} (Customer: {masked_name})\n"
+                    f"• Status: {order['ORDER_STATUS']}\n"
                     f"• Items: {item_descs}\n"
-                    f"• Delivery Address: {order.get('DELIVERY_ADDRESS', 'N/A')}\n\n"
-                    f"Shri Ram Baker par har cake order par live fresh bake hota hai (3-4 ghante wait time) to ensure 100% purity and taste!"
+                    f"• Delivery Destination: {masked_addr}\n\n"
+                    f"Shri Ram Baker par har cake order par live fresh bake hota hai (standard 3-4 ghante wait time) to ensure 100% purity and taste!"
                 )
                 session_memory.add_turn(user_message, reply, "ORDER_TRACKING")
                 return {"reply": reply, "ui_cards": [], "intent": "ORDER_TRACKING", "session_id": session_id}

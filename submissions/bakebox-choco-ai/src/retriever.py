@@ -8,6 +8,7 @@ Fused using Reciprocal Rank Fusion (RRF: k=60) for enterprise retrieval precisio
 """
 import math
 import re
+from collections import Counter
 from typing import List, Dict, Any, Optional
 import numpy as np
 try:
@@ -40,7 +41,8 @@ from src.vector_store import BakeboxDb2VectorStore
 
 class SimpleBM25:
     """
-    Lightweight, self-contained Okapi BM25 implementation for lexical sparse retrieval.
+    Lightweight, high-performance Okapi BM25 implementation for lexical sparse retrieval.
+    Precomputes term frequencies using hash maps (O(1) lookups) avoiding repeated list scanning.
     Zero external heavy dependencies; calculates exact BM25 scores across corpus tokens.
     """
     def __init__(self, corpus_texts: List[str], k1: float = 1.5, b: float = 0.75):
@@ -48,13 +50,14 @@ class SimpleBM25:
         self.b = b
         self.corpus_size = len(corpus_texts)
         self.tokenized_corpus = [self._tokenize(doc) for doc in corpus_texts]
+        self.doc_counts = [Counter(doc) for doc in self.tokenized_corpus]
         self.doc_lengths = [len(doc) for doc in self.tokenized_corpus]
         self.avg_doc_len = sum(self.doc_lengths) / (self.corpus_size or 1)
         
         # Calculate Document Frequencies (DF)
         self.df: Dict[str, int] = {}
-        for doc in self.tokenized_corpus:
-            for term in set(doc):
+        for counts in self.doc_counts:
+            for term in counts.keys():
                 self.df[term] = self.df.get(term, 0) + 1
 
     def _tokenize(self, text: str) -> List[str]:
@@ -71,8 +74,8 @@ class SimpleBM25:
             # Standard Robertson-Spärck Jones IDF
             idf = math.log(1.0 + (self.corpus_size - df_term + 0.5) / (df_term + 0.5))
             
-            for i, doc in enumerate(self.tokenized_corpus):
-                tf = doc.count(term)
+            for i, counts in enumerate(self.doc_counts):
+                tf = counts.get(term, 0)
                 if tf > 0:
                     denom = tf + self.k1 * (1.0 - self.b + self.b * (self.doc_lengths[i] / (self.avg_doc_len or 1)))
                     scores[i] += idf * (tf * (self.k1 + 1.0) / denom)
