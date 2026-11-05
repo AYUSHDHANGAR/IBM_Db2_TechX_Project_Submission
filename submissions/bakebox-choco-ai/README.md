@@ -3,6 +3,10 @@
 
 > **One-Line Pitch:** An enterprise autonomous AI bakery management system and intelligent customer engagement platform powered by **CHOCO AI** — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via `DB2LlamaVS`), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: $k=60$), session isolation with conversation buffer memory, and real-time agentic tools for up-to-3 cake precision recommendations and live backend order tracking.
 
+> [!NOTE]
+> **Hackathon Submission Scope & Repository Structure:**  
+> In accordance with the IBM Db2 TechX submission guidelines, this pull request submission folder (`submissions/bakebox-choco-ai/`) contains the complete, self-contained Python LlamaIndex hybrid RAG pipeline, Db2 vector store, and transactional order integration in `src/` and test suite in `tests/`. The full-stack interactive React 18 Storefront and FastAPI backend server demonstrated in our project screenshots are showcased live in our [YouTube Video Demo](https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV).
+
 ---
 
 ## Table of Contents
@@ -120,14 +124,14 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
 4. **Sparse Lexical Search B (TF-IDF):** Sub-linear token matching across cake weights, bases, and flavors.
 5. **3-Way Reciprocal Rank Fusion (RRF: $k=60$):** Combines dense and sparse channels to guarantee both conceptual relevance and exact keyword precision:
    $$\text{RRF Score}(d) = \frac{1}{60 + R_{\text{dense}}(d)} + \frac{1}{60 + R_{\text{bm25}}(d)} + \frac{1}{60 + R_{\text{tfidf}}(d)}$$
-6. **Synthesis Engine:** Powered by Google Gemini 3.8 Flash (`gemini-1.5-flash` / `gemini-3.8-flash`) for bilingual responses, with an automatic deterministic ground-truth fallback for offline environments (`--no-llm`).
+6. **Synthesis Engine:** Powered by Google Gemini 1.5 Flash (`gemini-1.5-flash`) for bilingual responses, with an automatic deterministic ground-truth fallback for offline environments (`--no-llm`).
 
 ---
 
-## Agentic Tools (Cosine Similarity Cards & Real-Time Order Tracking)
+## Agentic Tools (Hybrid RRF Ranked Cards & Protected Order Tracking)
 
-- **Agentic Tool 1 (`recommend_cakes`):** Renders **up to 3** (not a hardcoded fixed 3) structured cake cards meeting the cosine similarity threshold.
-- **Agentic Tool 2 (`track_live_order`):** Executes real-time backend SQL queries against IBM Db2 relational tables (`BB_ORDERS` JOIN `BB_ORDER_ITEMS`) for ground-truth order tracking, completely eliminating hallucination.
+- **Agentic Tool 1 (`recommend_cakes`):** Renders **up to 3** (not a hardcoded fixed 3) structured cake cards ranked by 3-Channel Reciprocal Rank Fusion (RRF: $k=60$) exceeding the `min_rrf_score = 0.015` threshold.
+- **Agentic Tool 2 (`track_live_order`):** Executes real-time backend SQL queries against IBM Db2 relational tables (`BB_ORDERS` JOIN `BB_ORDER_ITEMS`) for ground-truth order tracking, featuring automated privacy data masking for customer details.
 - **Agentic Tool 3 (`get_store_policy_or_advisory`):** Hybrid RRF retrieval for store working agreements (standard 3-4 hours baking wait time) and snack heating guidelines (dry tawa only, never microwave).
 
 ---
@@ -260,8 +264,11 @@ OK
 
 ## Known Limitations & Future Roadmap
 
-- **Current Scope:** Vector embeddings currently execute via local CPU; GPU acceleration can further minimize batch vectorization latency.
+- **Current Scope:**
+  - Vector embeddings execute via local CPU; GPU acceleration can further minimize batch vectorization latency.
+  - Session conversation memory is intentionally implemented in-memory (`SessionBufferMemory`) for lightweight, zero-dependency hackathon demonstration.
 - **Future Roadmap:**
+  - **Persistent Session Storage:** Transition from in-memory session buffer to Redis / Db2-backed TTL session cache for multi-worker horizontal scaling.
   - **Payment & Invoicing Gateway:** Direct UPI integration with automated receipt generation and live order state transitions in IBM Db2.
   - **Multi-Branch Kitchen Load Balancing:** Intelligent dispatch routing between Mathura, Vrindavan, and Govardhan kitchens based on oven capacity.
   - **Predictive Inventory Forecasting:** Time-series demand forecasting on historical Db2 order records to optimize fresh daily baking schedules.

@@ -35,6 +35,6 @@
   "tech_stack": {
     "languages": ["Python"],
     "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "scikit-learn"],
-    "ai_models": ["BAAI/bge-small-en-v1.5 (Local FastEmbed / SentenceTransformers)", "Google Gemini 3.8 Flash (LLM Engine)"]
+    "ai_models": ["BAAI/bge-small-en-v1.5 (Local FastEmbed / SentenceTransformers)", "Google Gemini 1.5 Flash (with 2.0 / 3.x compatibility)"]
   }
 }

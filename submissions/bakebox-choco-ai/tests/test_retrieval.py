@@ -5,9 +5,13 @@ Runs offline with zero live Db2 or external API dependencies:
 Or via standard library:
   python tests/test_retrieval.py
 """
+import os
 import sys
 import unittest
 import re
+
+# Ensure parent directory is in sys.path so 'src' can be imported seamlessly
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ingest import get_sample_bakery_documents
 from src.retriever import SimpleBM25

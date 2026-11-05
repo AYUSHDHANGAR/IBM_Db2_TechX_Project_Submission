@@ -50,11 +50,19 @@ def init_relational_tables(conn):
         created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
     )
     """
+    def _is_already_exists_error(err: Exception) -> bool:
+        err_msg = str(err).lower()
+        return "-601" in err_msg or "42710" in err_msg or "already exists" in err_msg or "duplicate" in err_msg
+
     try:
         execute_dml(conn, orders_sql)
         print("  -> Table BB_ORDERS created successfully.")
-    except Exception:
-        print("  -> Table BB_ORDERS already exists or was retained.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_ORDERS already exists (retained).")
+        else:
+            print(f"  [ERROR] Failed creating BB_ORDERS: {e}")
+            raise e
 
     # BB_ORDER_ITEMS Table
     items_sql = """
@@ -73,16 +81,31 @@ def init_relational_tables(conn):
     try:
         execute_dml(conn, items_sql)
         print("  -> Table BB_ORDER_ITEMS created successfully.")
-    except Exception:
-        print("  -> Table BB_ORDER_ITEMS already exists or was retained.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_ORDER_ITEMS already exists (retained).")
+        else:
+            print(f"  [ERROR] Failed creating BB_ORDER_ITEMS: {e}")
+            raise e
 
-    # Db2 Relational Indexes for Accelerated Query Optimization
+    # Db2 Relational Indexes for Accelerated Query Optimization (Independent try blocks)
     try:
         execute_dml(conn, "CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone)")
+        print("  -> Performance index IDX_BB_ORDER_PHONE created.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Index IDX_BB_ORDER_PHONE already exists.")
+        else:
+            print(f"  [WARNING] Index IDX_BB_ORDER_PHONE creation: {e}")
+
+    try:
         execute_dml(conn, "CREATE INDEX IDX_BB_ITEM_ORDER ON BB_ORDER_ITEMS(order_id)")
-        print("  -> Performance indexes (IDX_BB_ORDER_PHONE, IDX_BB_ITEM_ORDER) created.")
-    except Exception:
-        pass
+        print("  -> Performance index IDX_BB_ITEM_ORDER created.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Index IDX_BB_ITEM_ORDER already exists.")
+        else:
+            print(f"  [WARNING] Index IDX_BB_ITEM_ORDER creation: {e}")
 
     # Insert sample ground-truth demo order for testing
     try:
