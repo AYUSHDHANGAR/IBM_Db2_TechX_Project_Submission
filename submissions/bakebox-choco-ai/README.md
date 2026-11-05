@@ -290,8 +290,8 @@ Empirical evaluation across **30 curated bakery evaluation queries** (natural fl
 
 ## Demo & Submission Links
 
-- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM)
-- **LinkedIn Post:** [https://lnkd.in/p/gtXgu6wq](https://lnkd.in/p/gtXgu6wq)
+- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=BZTKdqnxtAVdOFLF](https://youtu.be/NLrRq6FX358?si=BZTKdqnxtAVdOFLF)
+- **LinkedIn Post:** [https://lnkd.in/p/gZXgB8B4](https://lnkd.in/p/gZXgB8B4)
 - **Hackathon PR Submission Repository:** [https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission](https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission)
 - **Full-Stack Application Repository (React 18 Storefront + FastAPI Backend):** [https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY](https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY)
 - **Standalone Seed Datasets:** High-quality JSON records provided in [`data/sample_catalog.json`](data/sample_catalog.json) and [`data/sample_orders.json`](data/sample_orders.json).
