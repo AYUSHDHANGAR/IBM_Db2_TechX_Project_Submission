@@ -68,7 +68,7 @@ flowchart TD
     end
 
     subgraph Generation ["Synthesis Engine"]
-        LLM["Google Gemini 3.8 Flash (or Deterministic Fallback)"]
+        LLM["Google Gemini 1.5 Flash (or Deterministic Fallback)"]
         Cards["Up to 3 Structured Cake JSON Cards"]
         OrderReport["Verified Real-Time Backend Order Status Report"]
     end

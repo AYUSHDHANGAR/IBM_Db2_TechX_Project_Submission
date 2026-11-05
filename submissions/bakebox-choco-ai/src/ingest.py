@@ -237,18 +237,34 @@ def get_sample_bakery_documents():
         },
         {
             "id": "POLICY_LOCATIONS",
-            "text": "Shri Ram Baker Branch Locations: Branch 1 (Main Kitchen): Bhagel Chaupal, Khatoti Kua, Mathura. Branch 2: Gausna, Mathura, Uttar Pradesh. Specializes in 100% pure vegetarian live fresh cakes with Khoaa eggless base.",
+            "text": "Shri Ram Baker Branch Locations: Branch 1 (Main Kitchen): Bhagel Chaupal, Khatoti Kua, Mathura. Branch 2: Holigate & Gosna, Mathura, Uttar Pradesh. Specializes in fresh live cakes with authentic Khoaa eggless and egg-based options.",
             "metadata": {"type": "store_info", "title": "Store Locations and Branches"}
+        },
+        {
+            "id": "POLICY_HOURS",
+            "text": "Shri Ram Baker Store Hours & Operation: Open daily from 8:00 AM to 11:00 PM, 7 days a week. Fresh live baking kitchen dispatches orders between 9:00 AM and 10:30 PM. Customer support available 24/7 through CHOCO AI.",
+            "metadata": {"type": "store_info", "title": "Store Opening Hours"}
+        },
+        {
+            "id": "POLICY_HISTORY",
+            "text": "Shri Ram Baker Bakery History & Heritage: Established over 20 years ago in Mathura, Shri Ram Baker's is a trusted family-owned bakery known for pioneering authentic Khoaa Eggless bases, premium wedding cakes, and pure ingredients.",
+            "metadata": {"type": "store_info", "title": "Bakery History and Heritage"}
+        },
+        {
+            "id": "POLICY_SNACKS",
+            "text": "Shri Ram Baker Savory Snacks & Hot Patties: We bake fresh oven patties including Aloo Patty (Rs 25), Paneer Patty (Rs 35), Tandoori Patty (Rs 40), and Cheese Mayo Patty (Rs 45), along with cookies, rusks, and celebration accessories.",
+            "metadata": {"type": "store_info", "title": "Patties and Savory Snacks Menu"}
         }
     ]
 
 def run_ingestion():
-    """Main execution of the ingestion pipeline."""
+    """Main execution of the ingestion pipeline with explicit connection cleanup."""
     print("==================================================================")
     print("BAKEBOX CHOCO AI — IBM Db2 DATA INGESTION PIPELINE")
     print("==================================================================")
     
     conn = get_dbi_connection()
+    vs = None
     try:
         # Step 1: Initialize Relational Tables
         init_relational_tables(conn)
@@ -297,6 +313,8 @@ def run_ingestion():
         print("DATA INGESTION SUCCESSFULLY COMPLETED!")
         print("==================================================================")
     finally:
+        if vs is not None:
+            vs.close()
         conn.close()
 
 if __name__ == "__main__":
