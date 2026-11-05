@@ -13,6 +13,7 @@
 - [AI & Advanced Hybrid RAG Architecture (BM25 + TF-IDF + Db2 Vectors)](#ai--advanced-hybrid-rag-architecture-bm25--tf-idf--db2-vectors)
 - [Agentic Tools (Cosine Similarity Cards & Real-Time Order Tracking)](#agentic-tools-cosine-similarity-cards--real-time-order-tracking)
 - [Session Isolation & Buffer Memory](#session-isolation--buffer-memory)
+- [Visual Proof & Application Screenshots](#visual-proof--application-screenshots)
 - [Prerequisites](#prerequisites)
 - [Setup & Installation](#setup--installation)
 - [Configuration](#configuration)
@@ -135,6 +136,26 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
 
 - **Session Isolation:** Each customer runs in an isolated session context (`session_id`), preventing cross-user data leakage.
 - **Conversation Buffer Memory:** Uses a sliding-window `SessionBufferMemory` to retain recent conversation context across multi-turn interactions.
+
+---
+
+## Visual Proof & Application Screenshots
+
+All high-resolution production screenshots are cataloged in [`docs/screenshots/`](docs/screenshots/README.md):
+
+| Feature / Proof | Screenshot Preview | Description |
+|---|---|---|
+| **IBM Db2 Database & Vectors** | ![IBM Db2 VS Code Extension](docs/screenshots/01_ibm_db2_extension_tables.png) | Active VS Code Db2 extension connected to `localhost@IBMDB201` showing all `BB_*` relational tables and `BB_RAG_CHUNKS` vector embeddings. |
+| **Catalog & Multi-Branch Storefront** | ![Storefront Overview](docs/screenshots/07_storefront_catalog_overview.png) | Real-time catalog showing 558 verified Db2 cakes, branch operational indicators, and pure-veg badges. |
+| **Direct Product Querying** | ![Catalog Grid & Ask CHOCO](docs/screenshots/09_product_catalog_grid_actions.png) | 1-Click "Ask CHOCO" buttons directly embedded into product catalog cards for instant AI consultations. |
+| **Real-Time Reasoning & RAG Retrieval** | ![Contextual Reasoning](docs/screenshots/10_ask_choco_contextual_query.png) | CHOCO AI dynamically ingesting cake SKU (`BB-STR-04-05kg`) into context with live reasoning indicator. |
+| **Master Baker Advisory** | ![Master Baker Response](docs/screenshots/11_choco_master_baker_recommendation.png) | Rich Hinglish response with exact ingredients, base options (Khoaa eggless), and personalized recommendations. |
+| **Live Order Tracking (Db2 Query)** | ![Live Order Status Confirmed](docs/screenshots/02_choco_order_status_confirmed.png) | Real-time SQL transactional lookup against `BB_ORDERS` and `BB_ORDER_ITEMS` for Order #1104 (`CONFIRMED`). |
+| **Real-Time Delivery Lifecycle** | ![Order Status Delivered](docs/screenshots/03_choco_order_status_delivered.png) | Synchronized delivery update reflecting `DELIVERED` status and kitchen dispatch tracking. |
+| **Customer Support & Policy Engine** | ![Happiness Guarantee Support](docs/screenshots/04_choco_happiness_guarantee_support.png) | Autonomous damaged order resolution referencing *Celebration Happiness Guarantee* from Db2 hybrid RAG. |
+| **Refund & Re-Bake Workflow** | ![Refund Resolution](docs/screenshots/08_refund_replacement_resolution.png) | Instant step-by-step resolution offering 100% Free Re-Bake or Full Refund without human latency. |
+| **Role-Based Authentication (RBAC)** | ![Role Selection Modal](docs/screenshots/05_bakebox_auth_role_modal.png) | Multi-role access control for Customer Demo, Super Admin, and Store Operator. |
+| **Store Operator Console** | ![Operator Login](docs/screenshots/06_operator_login.png) | Store operator login for kitchen management and branch order routing. |
 
 ---
 
