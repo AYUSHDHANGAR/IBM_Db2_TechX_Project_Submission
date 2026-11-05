@@ -63,16 +63,24 @@ class ConversationTurn:
 
 class SessionBufferMemory:
     """
-    Session-Isolated Conversation Buffer Memory.
+    Session-Isolated Conversation Buffer Memory with TTL (Time-To-Live).
     Maintains a dedicated sliding-window buffer of recent turns for each active user session,
-    ensuring strict session boundary isolation without cross-session data leakage.
+    with automatic expiration and memory eviction to ensure bounded resource utilization.
     """
-    def __init__(self, session_id: str, max_turns: int = 5):
+    def __init__(self, session_id: str, max_turns: int = 5, ttl_seconds: int = 3600):
         self.session_id = session_id
         self.max_turns = max_turns
+        self.ttl_seconds = ttl_seconds
+        self.last_active = time.time()
         self.turns: List[ConversationTurn] = []
 
+    def is_expired(self, current_time: Optional[float] = None) -> bool:
+        """Checks if session has exceeded its Time-To-Live threshold."""
+        now = current_time or time.time()
+        return (now - self.last_active) > self.ttl_seconds
+
     def add_turn(self, user_query: str, bot_reply: str, intent: str):
+        self.last_active = time.time()
         self.turns.append(ConversationTurn(user_query=user_query, bot_reply=bot_reply, intent=intent))
         if len(self.turns) > self.max_turns:
             self.turns.pop(0)
@@ -139,7 +147,16 @@ class ChocoQueryEngine:
         print("[OK] Choco Query Engine with IBM Db2 & Session Isolation is fully operational!\n")
 
     def get_or_create_session(self, session_id: str) -> SessionBufferMemory:
-        """Retrieves or creates an isolated Buffer Memory for the given user session."""
+        """
+        Retrieves or creates an isolated Buffer Memory for the given user session.
+        Automatically evicts expired sessions (TTL > 3600s) to prevent unbounded memory growth.
+        """
+        now = time.time()
+        # Evict inactive sessions older than TTL
+        expired_sessions = [sid for sid, s in self.sessions.items() if s.is_expired(now)]
+        for sid in expired_sessions:
+            del self.sessions[sid]
+
         if session_id not in self.sessions:
             self.sessions[session_id] = SessionBufferMemory(session_id=session_id)
         return self.sessions[session_id]

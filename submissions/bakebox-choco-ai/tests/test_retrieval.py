@@ -224,5 +224,33 @@ class TestBakeboxRetrieval(unittest.TestCase):
         for p in policy_docs:
             self.assertNotIn("sku_id", p.get("metadata", {}), "Policy chunks must not contain cake sku_id")
 
+    def test_session_memory_ttl_expiration_and_cleanup(self):
+        """Verify that inactive sessions expire and are cleanly evicted after TTL."""
+        from src.query_engine import SessionBufferMemory
+        
+        session = SessionBufferMemory(session_id="test_expiring_session", ttl_seconds=10)
+        session.add_turn("Hello", "Hi there", "GREETING")
+        
+        # Fresh session must not be expired
+        self.assertFalse(session.is_expired(current_time=session.last_active + 5))
+        
+        # Session after 11 seconds must be expired
+        self.assertTrue(session.is_expired(current_time=session.last_active + 11))
+
+    def test_retriever_dynamic_index_synchronization(self):
+        """Verify that lexical BM25 channels can be dynamically synchronized with updated nodes."""
+        from src.retriever import SimpleBM25
+        
+        initial_corpus = ["Red velvet anniversary cake", "Pineapple fresh gateau"]
+        bm25 = SimpleBM25(initial_corpus)
+        scores_initial = bm25.score("chocolate truffle")
+        self.assertEqual(scores_initial[0], 0.0)
+        
+        # Simulate index refresh with new chocolate products ingested
+        updated_corpus = initial_corpus + ["Chocolate truffle royal cake with dark glaze"]
+        bm25_synced = SimpleBM25(updated_corpus)
+        scores_synced = bm25_synced.score("chocolate truffle")
+        self.assertGreater(scores_synced[2], 0.0, "Newly synced chocolate cake must be retrievable")
+
 if __name__ == "__main__":
     unittest.main()

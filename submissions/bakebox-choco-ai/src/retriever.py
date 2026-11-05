@@ -191,3 +191,19 @@ class Db2HybridRRFRetriever(BaseRetriever):
                 results.append(NodeWithScore(node=node, score=score))
 
         return results
+
+    def refresh_index(self, updated_nodes: List[TextNode]):
+        """
+        Dynamically synchronizes lexical BM25 and TF-IDF channels with newly ingested
+        Db2 document nodes, ensuring corpus consistency across all 3 retrieval channels.
+        """
+        self.corpus_nodes = updated_nodes
+        self.nodes_dict = {n.id_: n for n in updated_nodes}
+        self.corpus_ids = [n.id_ for n in updated_nodes]
+        self.corpus_texts = [n.text for n in updated_nodes]
+        
+        # Rebuild lexical indexes for newly synced corpus
+        self.bm25 = SimpleBM25(self.corpus_texts)
+        if TfidfVectorizer and self.corpus_texts:
+            self.tfidf_matrix = self.tfidf.fit_transform(self.corpus_texts)
+        print(f"[SYNC] Lexical BM25 and TF-IDF indexes synchronized ({len(updated_nodes)} nodes).")
