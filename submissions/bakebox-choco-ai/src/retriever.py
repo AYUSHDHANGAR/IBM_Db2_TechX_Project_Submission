@@ -136,16 +136,19 @@ class Db2HybridRRFRetriever(BaseRetriever):
         Fuses rankings using Reciprocal Rank Fusion: score = sum(1 / (k + rank)).
         """
         # Channel 1: Dense Semantic Search via IBM Db2 DB2LlamaVS
-        q_emb = self.embed_func(query)
-        dense_res = self.vector_store.query(query_embedding=q_emb, top_k=top_k * 3)
-        dense_ranked_ids = dense_res.ids or []
-
-        # Cache any live nodes returned directly by DB2LlamaVS
+        dense_ranked_ids = []
         live_nodes_map: Dict[str, TextNode] = {}
-        if dense_res.nodes:
-            for idx, n in enumerate(dense_res.nodes):
-                node_id = dense_ranked_ids[idx] if idx < len(dense_ranked_ids) else n.id_
-                live_nodes_map[node_id] = n
+        if self.vector_store is not None:
+            try:
+                q_emb = self.embed_func(query)
+                dense_res = self.vector_store.query(query_embedding=q_emb, top_k=top_k * 3)
+                dense_ranked_ids = dense_res.ids or []
+                if dense_res.nodes:
+                    for idx, n in enumerate(dense_res.nodes):
+                        node_id = dense_ranked_ids[idx] if idx < len(dense_ranked_ids) else n.id_
+                        live_nodes_map[node_id] = n
+            except Exception as e:
+                print(f"[WARN] In-engine Db2 vector query failed: {e}. Falling back to lexical consensus channels.")
 
         # Channel 2: Sparse Lexical BM25 Search
         bm25_ranked_ids = []
