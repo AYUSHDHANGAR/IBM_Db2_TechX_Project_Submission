@@ -52,7 +52,8 @@ try:
     from llama_index.vector_stores.db2 import DistanceStrategy
 except ImportError:
     TextNode = None
-    DistanceStrategy = None
+    class DistanceStrategy:
+        COSINE = "COSINE"
 
 from src.db import get_dbi_connection, execute_query, db_session
 from src.vector_store import BakeboxDb2VectorStore
@@ -488,8 +489,8 @@ class ChocoQueryEngine:
         # 1. Distinguish Order Tracking from Cake Purchase
         tracking_keywords = ["track", "status", "kahan hai", "mera order", "delivery status", "check order"]
         order_id_match = re.search(r'(?:order\s*#?|#)\s*(\d{4,})', q_lower)
-        phone_match = re.search(r'(?:\+?91[\-\s]?)?([6-9]\d{9})\b', user_message)
-        phone_number = phone_match.group(1) if phone_match else None
+        phone_match = re.search(r'(?:\+?91[\-\s]?)?([6-9](?:[\s\-]?\d){9})\b', user_message)
+        phone_number = re.sub(r'\D', '', phone_match.group(1)) if phone_match else None
         
         is_order_tracking = any(k in q_lower for k in tracking_keywords) or (order_id_match and "order" in q_lower) or (phone_number and any(t in q_lower for t in ["order", "status", "track"]))
 

@@ -31,7 +31,8 @@ except ImportError:
     TextNode = None
     NodeRelationship = None
     RelatedNodeInfo = None
-    DistanceStrategy = None
+    class DistanceStrategy:
+        COSINE = "COSINE"
 
 from src.db import get_dbi_connection, execute_dml, execute_query
 # vector_store is imported inside run_ingestion() to allow importing sample docs standalone

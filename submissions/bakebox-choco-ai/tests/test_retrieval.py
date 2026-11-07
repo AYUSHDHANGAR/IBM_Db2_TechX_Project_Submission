@@ -119,6 +119,11 @@ class TestBakeboxProduction(unittest.TestCase):
         self.assertTrue(res_verified["CUSTOMER_PHONE"].endswith("3210"))
         self.assertIn("Confidential", res_verified["DELIVERY_ADDRESS"])
 
+        # Also verify space-separated phone formatting works seamlessly
+        res_spaced = self.engine.tool_track_live_order(order_id=1002, phone_number="98765 43210")
+        self.assertIsNotNone(res_spaced)
+        self.assertEqual(res_spaced["ORDER_ID"], 1002)
+
     def test_real_tool_track_live_order_like_wildcard_defense(self):
         """Verify that wildcard injection characters (% or _) in phone are neutralized."""
         # Attempting wildcard injection '%' or short input returns VERIFICATION_REQUIRED

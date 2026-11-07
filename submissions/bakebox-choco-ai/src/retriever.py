@@ -136,7 +136,7 @@ class Db2HybridRRFRetriever(BaseRetriever):
             self.tfidf_matrix = None
 
     def _retrieve(self, query_bundle) -> List[NodeWithScore]:
-        query_str = query_bundle.query_str
+        query_str = getattr(query_bundle, "query_str", str(query_bundle))
         return self.hybrid_retrieve(query_str, top_k=5)
 
     def hybrid_retrieve(self, query: str, top_k: int = 5) -> List[NodeWithScore]:

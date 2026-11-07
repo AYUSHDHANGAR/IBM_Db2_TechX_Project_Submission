@@ -45,9 +45,10 @@ class BakeboxDb2VectorStore:
         self.distance_strategy = distance_strategy
         self.connection = get_dbi_connection()
 
+        strat_name = getattr(distance_strategy, "name", str(distance_strategy))
         logger.info(
             f"Initializing DB2LlamaVS on table '{table_name}' "
-            f"with dimension {embed_dim} and strategy {distance_strategy.name}..."
+            f"with dimension {embed_dim} and strategy {strat_name}..."
         )
         self.vs = DB2LlamaVS(
             _client=self.connection,
