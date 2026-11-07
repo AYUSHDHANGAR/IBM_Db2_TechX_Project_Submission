@@ -90,7 +90,7 @@ def db_session():
     finally:
         conn.close()
 
-def execute_query(conn: Any, sql: str, params: tuple = ()) -> list[dict]:
+def execute_query(conn: Any, sql: str, params: Tuple = ()) -> List[Dict[str, Any]]:
     """Execute a SELECT query and return list of dictionaries with uppercase column keys."""
     cursor = conn.cursor()
     try:
@@ -101,7 +101,7 @@ def execute_query(conn: Any, sql: str, params: tuple = ()) -> list[dict]:
     finally:
         cursor.close()
 
-def execute_dml(conn: Any, sql: str, params: tuple = ()) -> int:
+def execute_dml(conn: Any, sql: str, params: Tuple = ()) -> int:
     """Execute INSERT/UPDATE/DELETE statement with explicit commit."""
     cursor = conn.cursor()
     try:

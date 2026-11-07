@@ -39,6 +39,18 @@ except ImportError:
 
 from src.vector_store import BakeboxDb2VectorStore
 
+def compute_rrf_score(ranks: List[Optional[int]], k: int = 60) -> float:
+    """
+    Computes standard Reciprocal Rank Fusion (RRF) score across arbitrary ranked channels:
+      RRF(d) = sum(1 / (k + rank + 1)) for each channel where d is present.
+    Standard constant k=60 (Cormack, Clarke & Büttcher, 2009).
+    """
+    score = 0.0
+    for r in ranks:
+        if r is not None and r >= 0:
+            score += 1.0 / (k + r + 1)
+    return score
+
 class SimpleBM25:
     """
     Lightweight, high-performance Okapi BM25 implementation for lexical sparse retrieval.

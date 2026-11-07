@@ -601,10 +601,16 @@ if __name__ == "__main__":
     print(f"REPLY:\n{res1['reply']}\n")
 
     print("==================================================================")
-    print("SESSION 2: Customer B (Live Order Status Check from Backend)")
+    print("SESSION 2: Customer B (Live Order Status Check - Security Challenge)")
     res2 = engine.query("Where is my order? Status of order #1002 please", session_id="session_user_B")
     print(f"INTENT: {res2['intent']} | CARDS: {len(res2['ui_cards'])}")
     print(f"REPLY:\n{res2['reply']}\n")
+
+    print("==================================================================")
+    print("SESSION 2 Follow-up: Customer B (Authenticated Live Order Tracking)")
+    res2_auth = engine.query("My registered phone is +91 9876543210 for order #1002", session_id="session_user_B")
+    print(f"INTENT: {res2_auth['intent']} | CARDS: {len(res2_auth['ui_cards'])}")
+    print(f"REPLY:\n{res2_auth['reply']}\n")
 
     print("==================================================================")
     print("SESSION 1 Follow-up: Customer A (Checking Heating Guidelines)")
