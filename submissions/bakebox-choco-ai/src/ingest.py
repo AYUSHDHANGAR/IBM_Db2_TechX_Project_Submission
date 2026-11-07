@@ -9,6 +9,11 @@ import os
 import sys
 import json
 
+# Ensure package parent directory is in sys.path so 'src' is importable from anywhere
+_pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _pkg_root not in sys.path:
+    sys.path.insert(0, _pkg_root)
+
 try:
     from fastembed import TextEmbedding
     HAS_FASTEMBED = True
