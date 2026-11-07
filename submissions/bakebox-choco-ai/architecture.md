@@ -100,9 +100,9 @@ flowchart TD
 
 ---
 
-## 3. IBM Db2 Native Vector Column Utilization
+## 3. IBM Db2 Native Vector & Relational Database Schemas (DDL)
 
-### Official `DB2LlamaVS` Table Schema
+### 3.1 Official `DB2LlamaVS` Vector Table Schema
 The table `BB_CHUNKS_VECTOR` is initialized and managed directly via `llama-index-vector-stores-db2`:
 
 ```sql
@@ -116,7 +116,44 @@ CREATE TABLE BB_CHUNKS_VECTOR (
 );
 ```
 
-### In-Engine Vector Distance Search
+### 3.2 Relational Transactional Tables (ACID Orders & Line Items)
+```sql
+CREATE TABLE BB_ORDERS (
+    order_id INT NOT NULL PRIMARY KEY,
+    user_id INT,
+    customer_name VARCHAR(128) NOT NULL,
+    customer_phone VARCHAR(32) NOT NULL,
+    order_type VARCHAR(32) DEFAULT 'DELIVERY',
+    order_status VARCHAR(32) DEFAULT 'BAKING',
+    total_amount DECIMAL(10, 2) NOT NULL,
+    delivery_address VARCHAR(512),
+    special_notes VARCHAR(512),
+    created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
+);
+
+CREATE TABLE BB_ORDER_ITEMS (
+    item_id INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
+    order_id INT NOT NULL,
+    sku_id VARCHAR(64) NOT NULL,
+    item_name VARCHAR(256) NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(10, 2) NOT NULL,
+    cake_base VARCHAR(64) DEFAULT 'Khoaa (Eggless)',
+    cake_weight VARCHAR(32) DEFAULT '1kg',
+    custom_message VARCHAR(256)
+);
+```
+
+### 3.3 High-Performance Db2 B-Tree Indexes
+```sql
+-- Accelerated customer phone verification lookup
+CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone);
+
+-- Accelerated order-to-items join performance
+CREATE INDEX IDX_BB_ITEM_ORDER ON BB_ORDER_ITEMS(order_id);
+```
+
+### 3.4 In-Engine Vector Distance Search
 When `BakeboxDb2VectorStore.query()` is invoked, IBM Db2 executes cosine distance calculations internally:
 $$\text{Cosine Distance}(A, B) = 1 - \frac{A \cdot B}{\|A\|_2 \|B\|_2}$$
 

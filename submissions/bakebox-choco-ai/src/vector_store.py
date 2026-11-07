@@ -4,7 +4,7 @@ llama-index-vector-stores-db2 (DB2LlamaVS).
 Demonstrates native VECTOR column handling (vector(dim, FLOAT32)) and in-engine distance search.
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 
 try:
     from llama_index.core.schema import TextNode
@@ -27,10 +27,12 @@ from src.db import get_dbi_connection
 
 logger = logging.getLogger("bakebox.vector_store")
 
+
 class BakeboxDb2VectorStore:
     """
-    Wrapper around official DB2LlamaVS vector store.
+    Enterprise wrapper around official DB2LlamaVS vector store.
     Utilizes Db2 v12.1.2+ native vector capabilities with COSINE distance strategy.
+    Supports context management (`with` statement) for reliable connection lifecycle.
     """
     def __init__(
         self,
@@ -54,22 +56,19 @@ class BakeboxDb2VectorStore:
             embed_dim=self.embed_dim
         )
 
-    def close(self):
-        """Explicitly cleans up and closes the underlying Db2 connection."""
-        if hasattr(self, 'connection') and self.connection:
-            try:
-                self.connection.close()
-                logger.info("Db2 vector store connection closed cleanly.")
-            except Exception as e:
-                logger.warning(f"Error closing Db2 vector store connection: {e}")
+    def __enter__(self):
+        return self
 
-    def add_nodes(self, nodes: list[TextNode]):
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def add_nodes(self, nodes: List[TextNode]):
         """Ingest TextNode objects with pre-computed vector embeddings into Db2."""
         return self.vs.add(nodes)
 
     def query(
         self,
-        query_embedding: list[float],
+        query_embedding: List[float],
         top_k: int = 5,
         filters: Optional[MetadataFilters] = None
     ) -> VectorStoreQueryResult:
@@ -89,9 +88,11 @@ class BakeboxDb2VectorStore:
         return self.vs.delete(doc_id)
 
     def close(self):
-        """Safely close the underlying Db2 database connection."""
-        if self.connection:
+        """Explicitly cleans up and safely closes the underlying Db2 connection."""
+        if hasattr(self, 'connection') and self.connection:
             try:
                 self.connection.close()
-            except Exception:
-                pass
+                self.connection = None
+                logger.info("Db2 vector store connection closed cleanly.")
+            except Exception as e:
+                logger.warning(f"Error closing Db2 vector store connection: {e}")

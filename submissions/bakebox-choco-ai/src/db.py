@@ -7,6 +7,7 @@ import os
 import sys
 from pathlib import Path
 from contextlib import contextmanager
+from typing import Any, List, Dict, Tuple
 
 # 1. Automatically load configuration from .env file if available
 try:
@@ -88,8 +89,6 @@ def db_session():
         raise e
     finally:
         conn.close()
-
-from typing import Any
 
 def execute_query(conn: Any, sql: str, params: tuple = ()) -> list[dict]:
     """Execute a SELECT query and return list of dictionaries with uppercase column keys."""
