@@ -12,6 +12,12 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ### 1.1 IBM Db2 Live Database & Vector Store Verification
 #### `01_ibm_db2_extension_tables.png`
 ![IBM Db2 Developer Extension](01_ibm_db2_extension_tables.png)
+
+> [!NOTE]
+> **Production Deployment vs Evaluation Scope:**  
+> Screenshot `01_ibm_db2_extension_tables.png` demonstrates the complete enterprise schema from the live deployed Mathura storefront (demonstrated in our YouTube walkthrough).
+> For lightweight, zero-bloat hackathon reproducibility, this submission package (`submissions/bakebox-choco-ai/`) isolates the core evaluated microservices: `BB_CHUNKS_VECTOR` (Db2 native vector search via `DB2LlamaVS`), `BB_ORDERS` & `BB_ORDER_ITEMS` (relational ACID tables with foreign key cascade), and `V_ACTIVE_BAKERY_ORDERS` (operational SQL view), with sample evaluation datasets in `data/`.
+
 - **Component:** IBM Db2 Developer Extension in Visual Studio Code.
 - **Connection:** Live instance connected at `localhost@IBMDB201` under schema `DBAYUSH`.
 - **Database Tables Verified:**
