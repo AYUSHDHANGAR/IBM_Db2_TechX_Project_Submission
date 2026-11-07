@@ -3,7 +3,7 @@
 This directory documents execution traces, architectural flow, and visual verification screenshots demonstrating the real-world deployment, IBM Db2 database integration, and autonomous customer support capabilities of **BAKEBOX - CHOCO AI**.
 
 A full interactive video walkthrough demonstrating the live queries, order tracking, and cake recommendation cards is available on YouTube:  
-**[Watch Video Walkthrough (YouTube)](https://youtu.be/MvH82OEsDUA?si=nVuy2awvxKJAaZkV)**
+**[Watch Video Walkthrough (YouTube)](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM)**
 
 ---
 
@@ -173,12 +173,20 @@ Shri Ram Baker par har cake order par fresh bake hota hai (3-4 ghante wait time)
 ```text
 pytest submissions/bakebox-choco-ai/tests -v
 
-tests/test_retrieval.py::test_rrf_scoring_formula PASSED
-tests/test_retrieval.py::test_intent_classification_no_order_hijack PASSED
-tests/test_retrieval.py::test_intent_classification_order_tracking PASSED
-tests/test_retrieval.py::test_intent_classification_policy PASSED
-tests/test_retrieval.py::test_filter_upto_three_cards_dynamic PASSED
-tests/test_retrieval.py::test_sample_bakery_documents_schema PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_3way_rrf_scoring_formula PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_bm25_lexical_scoring PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_no_order_hijack PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_order_tracking PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_policy PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_filter_upto_three_cards_dynamic PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_session_isolation_and_buffer_memory PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_masked_connection_string_security PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_sample_bakery_documents_schema PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_general_inquiry PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_order_tracking_security_phone_verification PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_policy_metadata_filtering PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_session_memory_ttl_expiration_and_cleanup PASSED
+tests/test_retrieval.py::TestBakeboxRetrieval::test_retriever_dynamic_index_synchronization PASSED
 
-============================== 6 passed in 0.12s ==============================
+============================== 14 passed in 0.05s ==============================
 ```
