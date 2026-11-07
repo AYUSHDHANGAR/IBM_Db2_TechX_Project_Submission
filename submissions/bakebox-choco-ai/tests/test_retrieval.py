@@ -14,18 +14,11 @@ import re
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ingest import get_sample_bakery_documents
-from src.retriever import SimpleBM25
+from src.retriever import SimpleBM25, compute_rrf_score
 
 def compute_3way_rrf_score(rank_dense: int, rank_bm25: int, rank_tfidf: int, k: int = 60) -> float:
-    """Computes 3-way Reciprocal Rank Fusion score across Dense Db2, BM25, and TF-IDF."""
-    score = 0.0
-    if rank_dense is not None:
-        score += 1.0 / (k + rank_dense + 1)
-    if rank_bm25 is not None:
-        score += 1.0 / (k + rank_bm25 + 1)
-    if rank_tfidf is not None:
-        score += 1.0 / (k + rank_tfidf + 1)
-    return score
+    """Computes 3-way Reciprocal Rank Fusion score using reusable RRF function from src.retriever."""
+    return compute_rrf_score([rank_dense, rank_bm25, rank_tfidf], k=k)
 
 def classify_query_intent(query: str) -> str:
     """Robust intent classification separating ordering/buying from order tracking."""
