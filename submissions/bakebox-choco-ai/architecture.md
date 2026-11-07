@@ -140,11 +140,22 @@ CREATE TABLE BB_ORDER_ITEMS (
     unit_price DECIMAL(10, 2) NOT NULL,
     cake_base VARCHAR(64) DEFAULT 'Khoaa (Eggless)',
     cake_weight VARCHAR(32) DEFAULT '1kg',
-    custom_message VARCHAR(256)
+    custom_message VARCHAR(256),
+    CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE
 );
 ```
 
-### 3.3 High-Performance Db2 B-Tree Indexes
+### 3.3 Operational Aggregation SQL View
+```sql
+CREATE VIEW V_ACTIVE_BAKERY_ORDERS AS
+SELECT O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at,
+       COUNT(I.item_id) AS total_items
+FROM BB_ORDERS O
+LEFT JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
+GROUP BY O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at;
+```
+
+### 3.4 High-Performance Db2 B-Tree Indexes
 ```sql
 -- Accelerated customer phone verification lookup
 CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone);
@@ -153,7 +164,7 @@ CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone);
 CREATE INDEX IDX_BB_ITEM_ORDER ON BB_ORDER_ITEMS(order_id);
 ```
 
-### 3.4 In-Engine Vector Distance Search
+### 3.5 In-Engine Vector Distance Search
 When `BakeboxDb2VectorStore.query()` is invoked, IBM Db2 executes cosine distance calculations internally:
 $$\text{Cosine Distance}(A, B) = 1 - \frac{A \cdot B}{\|A\|_2 \|B\|_2}$$
 

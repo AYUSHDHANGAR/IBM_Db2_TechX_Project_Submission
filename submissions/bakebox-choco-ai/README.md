@@ -96,10 +96,10 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
         created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
     );
     ```
-  - `BB_ORDER_ITEMS`: Relational order line items:
+  - `BB_ORDER_ITEMS`: Relational order line items with foreign key cascading integrity:
     ```sql
     CREATE TABLE BB_ORDER_ITEMS (
-        item_id INT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        item_id INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
         order_id INT NOT NULL,
         sku_id VARCHAR(64) NOT NULL,
         item_name VARCHAR(256) NOT NULL,
@@ -107,8 +107,18 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
         unit_price DECIMAL(10, 2) NOT NULL,
         cake_base VARCHAR(64) DEFAULT 'Khoaa (Eggless)',
         cake_weight VARCHAR(32) DEFAULT '1kg',
-        custom_message VARCHAR(256)
+        custom_message VARCHAR(256),
+        CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE
     );
+    ```
+  - `V_ACTIVE_BAKERY_ORDERS`: Operational Db2 SQL View aggregating live order dispatch metrics:
+    ```sql
+    CREATE VIEW V_ACTIVE_BAKERY_ORDERS AS
+    SELECT O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at,
+           COUNT(I.item_id) AS total_items
+    FROM BB_ORDERS O
+    LEFT JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
+    GROUP BY O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at;
     ```
 - **Key Operations:**
   - In-engine Cosine distance similarity search via `DB2LlamaVS.query()`.
@@ -290,8 +300,8 @@ Empirical evaluation across **30 curated bakery evaluation queries** (natural fl
 
 ## Demo & Submission Links
 
-- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=BZTKdqnxtAVdOFLF](https://youtu.be/NLrRq6FX358?si=BZTKdqnxtAVdOFLF)
-- **LinkedIn Post:** [https://lnkd.in/p/gZXgB8B4](https://lnkd.in/p/gZXgB8B4)
+- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM)
+- **LinkedIn Post:** [https://lnkd.in/p/gtXgu6wq](https://lnkd.in/p/gtXgu6wq)
 - **Hackathon PR Submission Repository:** [https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission](https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission)
 - **Full-Stack Application Repository (React 18 Storefront + FastAPI Backend):** [https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY](https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY)
 - **Standalone Seed Datasets:** High-quality JSON records provided in [`data/sample_catalog.json`](data/sample_catalog.json) and [`data/sample_orders.json`](data/sample_orders.json).

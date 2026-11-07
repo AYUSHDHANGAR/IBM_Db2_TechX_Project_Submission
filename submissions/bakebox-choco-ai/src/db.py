@@ -33,15 +33,16 @@ except ImportError:
 DB2_HOST = os.getenv("DB2_HOST", "127.0.0.1")
 DB2_PORT = os.getenv("DB2_PORT", "50000")
 DB2_DATABASE = os.getenv("DB2_DATABASE", "IBMDB201")
-DB2_USER = os.getenv("DB2_USER")
-DB2_PASSWORD = os.getenv("DB2_PASSWORD")
 
 def get_connection_string() -> str:
     """
     Build and validate standard IBM Db2 TCPIP connection string.
+    Credentials are read on-demand to prevent storing secrets in module-level memory.
     Raises ValueError if required database credentials are missing.
     """
-    if not DB2_USER or not DB2_PASSWORD:
+    db_user = os.getenv("DB2_USER")
+    db_password = os.getenv("DB2_PASSWORD")
+    if not db_user or not db_password:
         raise ValueError(
             "Missing Db2 credentials! Please configure DB2_USER and DB2_PASSWORD "
             "in your .env file or environment variables before executing database queries."
@@ -51,13 +52,14 @@ def get_connection_string() -> str:
         f"HOSTNAME={DB2_HOST};"
         f"PORT={DB2_PORT};"
         f"PROTOCOL=TCPIP;"
-        f"UID={DB2_USER};"
-        f"PWD={DB2_PASSWORD};"
+        f"UID={db_user};"
+        f"PWD={db_password};"
     )
 
 def get_masked_connection_string() -> str:
     """Returns safe connection string with password masked for safe logging/display."""
-    return f"DATABASE={DB2_DATABASE};HOSTNAME={DB2_HOST};PORT={DB2_PORT};PROTOCOL=TCPIP;UID={DB2_USER};PWD=********;"
+    db_user = os.getenv("DB2_USER", "db2inst1")
+    return f"DATABASE={DB2_DATABASE};HOSTNAME={DB2_HOST};PORT={DB2_PORT};PROTOCOL=TCPIP;UID={db_user};PWD=********;"
 
 def get_raw_connection():
     """Returns a raw ibm_db connection."""

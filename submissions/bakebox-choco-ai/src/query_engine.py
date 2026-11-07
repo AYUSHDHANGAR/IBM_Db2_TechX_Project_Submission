@@ -60,6 +60,38 @@ from src.retriever import Db2HybridRRFRetriever
 from src.ingest import get_sample_bakery_documents
 
 # ==============================================================================
+# SECURITY & PRIVACY DATA MASKING UTILITIES
+# ==============================================================================
+
+def mask_customer_name(name: str) -> str:
+    """Masks customer name, e.g. 'Rahul Sharma' -> 'R**** S*****'."""
+    parts = name.strip().split()
+    masked = []
+    for p in parts:
+        if len(p) <= 2:
+            masked.append(p[0] + "*")
+        else:
+            masked.append(p[0] + "*" * (len(p) - 1))
+    return " ".join(masked) if masked else "C*******"
+
+def mask_phone_number(phone: str) -> str:
+    """Masks phone number showing only last 4 digits, e.g. '+91 ******3210'."""
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) >= 10:
+        return f"+91 ******{digits[-4:]}"
+    return "******"
+
+def mask_delivery_address(addr: str) -> str:
+    """Masks street address while preserving locality and state for privacy."""
+    parts = [p.strip() for p in addr.split(",") if p.strip()]
+    if len(parts) >= 2:
+        return f"***, {parts[-2]}, {parts[-1]} (Confidential)"
+    elif parts:
+        return f"***, {parts[-1]} (Confidential)"
+    return "Mathura, UP (Confidential)"
+
+
+# ==============================================================================
 # SESSION ISOLATION & CONVERSATION BUFFER MEMORY
 # ==============================================================================
 
@@ -270,65 +302,110 @@ class ChocoQueryEngine:
         Agentic Tool 2:
         Executes real-time ACID transactional SQL queries against IBM Db2 relational
         tables (BB_ORDERS and BB_ORDER_ITEMS).
-        Security: Enforces two-factor verification (order_id + phone number match)
-        to prevent unauthorized enumeration and protect customer data privacy.
+        Security:
+        - Strict regex phone sanitization to prevent SQL LIKE wildcard injection (% or _).
+        - Enforces two-factor verification (order_id + phone number match).
+        - PII data masking (Name, Phone, Address) applied directly at the database retrieval boundary.
         """
         if not order_id and not phone_number:
             return None
 
+        # Sanitize phone number strictly to numeric digits only (prevents LIKE wildcard injection)
+        clean_phone_digits = re.sub(r'\D', '', phone_number or "")
+        phone_10 = clean_phone_digits[-10:] if len(clean_phone_digits) >= 10 else None
+
         try:
             conn = get_dbi_connection()
-        except Exception as e:
-            # Safe fallback for offline evaluation/demo when Db2 instance is not yet running
-            if order_id == 1002 or (phone_number and "9876543210" in phone_number):
-                if order_id and not phone_number:
-                    return {"auth_error": "VERIFICATION_REQUIRED", "order_id": order_id}
-                if order_id and phone_number and "9876543210" not in phone_number:
-                    return {"auth_error": "PHONE_MISMATCH", "order_id": order_id}
-                return {
-                    "ORDER_ID": 1002,
-                    "CUSTOMER_NAME": "Rahul Sharma",
-                    "CUSTOMER_PHONE": "+91 9876543210",
-                    "ORDER_STATUS": "BAKING",
-                    "TOTAL_AMOUNT": 649.00,
-                    "DELIVERY_ADDRESS": "Krishna Nagar, Mathura",
-                    "ITEMS": [{
-                        "ITEM_NAME": "Red Velvet Heart Special",
-                        "QUANTITY": 1,
-                        "CAKE_WEIGHT": "1.0kg",
-                        "CAKE_BASE": "Khoaa (Eggless)",
-                        "UNIT_PRICE": 649.00
-                    }]
+        except Exception:
+            # Dynamic fallback using data/sample_orders.json for offline evaluation
+            sample_orders_path = os.path.join(_pkg_root, "data", "sample_orders.json")
+            candidate_orders = []
+            if os.path.isfile(sample_orders_path):
+                try:
+                    with open(sample_orders_path, "r", encoding="utf-8") as f:
+                        candidate_orders = json.load(f)
+                except Exception:
+                    pass
+            
+            matched_order = None
+            for ord_item in candidate_orders:
+                ord_phone_digits = re.sub(r'\D', '', ord_item.get("customer_phone", ""))
+                if order_id and ord_item.get("order_id") == order_id:
+                    matched_order = ord_item
+                    break
+                elif phone_10 and ord_phone_digits.endswith(phone_10):
+                    matched_order = ord_item
+                    break
+
+            if matched_order:
+                m_oid = matched_order["order_id"]
+                m_phone_digits = re.sub(r'\D', '', matched_order.get("customer_phone", ""))
+                if order_id and not phone_10:
+                    return {"auth_error": "VERIFICATION_REQUIRED", "order_id": m_oid}
+                if order_id and phone_10 and not m_phone_digits.endswith(phone_10):
+                    return {"auth_error": "PHONE_MISMATCH", "order_id": m_oid}
+
+                # Construct masked response directly at data layer
+                masked_order = {
+                    "ORDER_ID": m_oid,
+                    "CUSTOMER_NAME": mask_customer_name(matched_order.get("customer_name", "Customer")),
+                    "CUSTOMER_PHONE": mask_phone_number(matched_order.get("customer_phone", "")),
+                    "ORDER_STATUS": matched_order.get("order_status", "CONFIRMED"),
+                    "TOTAL_AMOUNT": float(matched_order.get("total_amount", 0.0)),
+                    "DELIVERY_ADDRESS": mask_delivery_address(matched_order.get("delivery_address", "")),
+                    "ITEMS": [
+                        {
+                            "ITEM_NAME": itm.get("item_name", "Cake"),
+                            "QUANTITY": itm.get("quantity", 1),
+                            "CAKE_WEIGHT": itm.get("cake_weight", "1.0kg"),
+                            "CAKE_BASE": itm.get("cake_base", "Khoaa (Eggless)"),
+                            "UNIT_PRICE": float(itm.get("unit_price", 0.0))
+                        }
+                        for itm in matched_order.get("items", [])
+                    ]
                 }
+                return masked_order
             return None
 
         try:
-            if order_id and phone_number:
-                # Dual-factor verification: match order_id AND registered phone
-                clean_phone = phone_number[-10:] if len(phone_number) >= 10 else phone_number
-                sql_order = "SELECT * FROM BB_ORDERS WHERE order_id = ? AND customer_phone LIKE ?"
-                order_rows = execute_query(conn, sql_order, (order_id, f"%{clean_phone}%"))
+            # Explicit column selection avoiding SELECT * anti-pattern
+            sql_order_base = (
+                "SELECT order_id, user_id, customer_name, customer_phone, order_type, "
+                "order_status, total_amount, delivery_address, special_notes, created_at "
+                "FROM BB_ORDERS"
+            )
+
+            if order_id and phone_10:
+                # Parameterized exact digit equality (RIGHT function) - ZERO wildcard injection vulnerability
+                sql_order = f"{sql_order_base} WHERE order_id = ? AND RIGHT(REPLACE(REPLACE(customer_phone, ' ', ''), '-', ''), 10) = ?"
+                order_rows = execute_query(conn, sql_order, (order_id, phone_10))
                 if not order_rows:
-                    # Check if order exists to distinguish between not found vs verification mismatch
                     check_id = execute_query(conn, "SELECT order_id FROM BB_ORDERS WHERE order_id = ?", (order_id,))
                     if check_id:
                         return {"auth_error": "PHONE_MISMATCH", "order_id": order_id}
                     return None
-            elif order_id and not phone_number:
-                # Security policy: Require phone verification before disclosing order details
+            elif order_id and not phone_10:
                 return {"auth_error": "VERIFICATION_REQUIRED", "order_id": order_id}
             else:
-                clean_phone = phone_number[-10:] if len(phone_number) >= 10 else phone_number
-                sql_order = "SELECT * FROM BB_ORDERS WHERE customer_phone LIKE ? ORDER BY created_at DESC"
-                order_rows = execute_query(conn, sql_order, (f"%{clean_phone}%",))
+                sql_order = f"{sql_order_base} WHERE RIGHT(REPLACE(REPLACE(customer_phone, ' ', ''), '-', ''), 10) = ? ORDER BY created_at DESC"
+                order_rows = execute_query(conn, sql_order, (phone_10,))
 
             if not order_rows:
                 return None
-            
+
             order = order_rows[0]
-            sql_items = "SELECT * FROM BB_ORDER_ITEMS WHERE order_id = ?"
+            # Explicit column selection for order items
+            sql_items = (
+                "SELECT item_id, order_id, sku_id, item_name, quantity, unit_price, "
+                "cake_base, cake_weight, custom_message FROM BB_ORDER_ITEMS WHERE order_id = ?"
+            )
             items = execute_query(conn, sql_items, (order['ORDER_ID'],))
             order["ITEMS"] = items
+
+            # Enforce PII masking at the database boundary before returning
+            order["CUSTOMER_NAME"] = mask_customer_name(order.get("CUSTOMER_NAME", "Customer"))
+            order["CUSTOMER_PHONE"] = mask_phone_number(order.get("CUSTOMER_PHONE", ""))
+            order["DELIVERY_ADDRESS"] = mask_delivery_address(order.get("DELIVERY_ADDRESS", ""))
             return order
         finally:
             conn.close()
@@ -453,20 +530,17 @@ class ChocoQueryEngine:
                     f"{it.get('QUANTITY', 1)}x {it.get('ITEM_NAME', 'Cake')} ({it.get('CAKE_WEIGHT', '')}, {it.get('CAKE_BASE', '')})"
                     for it in items
                 ])
-                # Privacy-preserving data masking
+                # Data masking already verified and applied at the database retrieval boundary
                 cust_name = order.get('CUSTOMER_NAME', 'Customer')
-                masked_name = cust_name[0] + "***" if len(cust_name) > 1 else "Customer"
-                raw_addr = order.get('DELIVERY_ADDRESS', 'Mathura, UP')
-                addr_parts = [p.strip() for p in raw_addr.split(",") if p.strip()]
-                masked_addr = f"***, {addr_parts[-1]} (Verified & Confidential)" if addr_parts else "Mathura (Verified)"
+                delivery_destination = order.get('DELIVERY_ADDRESS', 'Mathura, UP (Confidential)')
 
                 reply = (
                     f"Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!\n\n"
                     f"Humne aapke order ki live details IBM Db2 se verify kar li hain:\n"
-                    f"• Order ID: #{order['ORDER_ID']} (Customer: {masked_name})\n"
+                    f"• Order ID: #{order['ORDER_ID']} (Customer: {cust_name})\n"
                     f"• Status: {order['ORDER_STATUS']}\n"
                     f"• Items: {item_descs}\n"
-                    f"• Delivery Destination: {masked_addr}\n\n"
+                    f"• Delivery Destination: {delivery_destination}\n\n"
                     f"Shri Ram Baker par har cake order par live fresh bake hota hai (standard 3-4 ghante wait time) to ensure 100% purity and taste!"
                 )
                 session_memory.add_turn(user_message, reply, "ORDER_TRACKING")

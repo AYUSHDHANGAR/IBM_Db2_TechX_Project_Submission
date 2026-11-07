@@ -69,7 +69,7 @@ def init_relational_tables(conn):
             print(f"  [ERROR] Failed creating BB_ORDERS: {e}")
             raise e
 
-    # BB_ORDER_ITEMS Table
+    # BB_ORDER_ITEMS Table with Relational Foreign Key Constraint
     items_sql = """
     CREATE TABLE BB_ORDER_ITEMS (
         item_id INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
@@ -80,18 +80,37 @@ def init_relational_tables(conn):
         unit_price DECIMAL(10, 2) NOT NULL,
         cake_base VARCHAR(64) DEFAULT 'Khoaa (Eggless)',
         cake_weight VARCHAR(32) DEFAULT '1kg',
-        custom_message VARCHAR(256)
+        custom_message VARCHAR(256),
+        CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE
     )
     """
     try:
         execute_dml(conn, items_sql)
-        print("  -> Table BB_ORDER_ITEMS created successfully.")
+        print("  -> Table BB_ORDER_ITEMS created successfully with FK constraint.")
     except Exception as e:
         if _is_already_exists_error(e):
             print("  -> Table BB_ORDER_ITEMS already exists (retained).")
         else:
             print(f"  [ERROR] Failed creating BB_ORDER_ITEMS: {e}")
             raise e
+
+    # Operational IBM Db2 SQL View for active order aggregation
+    view_sql = """
+    CREATE VIEW V_ACTIVE_BAKERY_ORDERS AS
+    SELECT O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at,
+           COUNT(I.item_id) AS total_items
+    FROM BB_ORDERS O
+    LEFT JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
+    GROUP BY O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at
+    """
+    try:
+        execute_dml(conn, view_sql)
+        print("  -> Operational SQL View V_ACTIVE_BAKERY_ORDERS created.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> SQL View V_ACTIVE_BAKERY_ORDERS already exists (retained).")
+        else:
+            print(f"  [WARNING] View creation: {e}")
 
     # Db2 Relational Indexes for Accelerated Query Optimization (Independent try blocks)
     try:
@@ -112,59 +131,101 @@ def init_relational_tables(conn):
         else:
             print(f"  [WARNING] Index IDX_BB_ITEM_ORDER creation: {e}")
 
-    # Insert sample ground-truth demo order for testing
-    try:
-        check_order = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_ORDERS WHERE order_id = 1002")
-        if not check_order or check_order[0]["CNT"] == 0:
-            execute_dml(
-                conn,
-                """
-                INSERT INTO BB_ORDERS 
-                (order_id, user_id, customer_name, customer_phone, order_type, order_status, total_amount, delivery_address, special_notes)
-                VALUES (1002, 3, 'Rahul Sharma', '+91 9876543210', 'DELIVERY', 'BAKING', 649.00, 'Krishna Nagar, Mathura', '1st Anniversary Celebration')
-                """
-            )
-            execute_dml(
-                conn,
-                """
-                INSERT INTO BB_ORDER_ITEMS 
-                (order_id, sku_id, item_name, quantity, unit_price, cake_base, cake_weight, custom_message)
-                VALUES (1002, 'BB-RED-02-1kg', 'Red Velvet Heart Special', 1, 649.00, 'Khoaa (Eggless)', '1.0kg', 'Happy 1st Anniversary')
-                """
-            )
-            print("  -> Seeded demo active order #1002 for 'Rahul Sharma' (Status: BAKING at Khatoti Kua kitchen).")
-    except Exception as e:
-        print(f"  -> Order seeding status: {e}")
+    # Seed sample orders dynamically from data/sample_orders.json
+    orders_file = os.path.join(_pkg_root, "data", "sample_orders.json")
+    if os.path.isfile(orders_file):
+        try:
+            with open(orders_file, "r", encoding="utf-8") as f:
+                seed_orders = json.load(f)
+            for ord_data in seed_orders:
+                oid = ord_data["order_id"]
+                check_order = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_ORDERS WHERE order_id = ?", (oid,))
+                if not check_order or check_order[0]["CNT"] == 0:
+                    execute_dml(
+                        conn,
+                        """
+                        INSERT INTO BB_ORDERS 
+                        (order_id, user_id, customer_name, customer_phone, order_type, order_status, total_amount, delivery_address, special_notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            oid,
+                            ord_data.get("user_id", 1),
+                            ord_data.get("customer_name", "Customer"),
+                            ord_data.get("customer_phone", ""),
+                            ord_data.get("order_type", "DELIVERY"),
+                            ord_data.get("order_status", "CONFIRMED"),
+                            float(ord_data.get("total_amount", 0.0)),
+                            ord_data.get("delivery_address", ""),
+                            ord_data.get("special_notes", "")
+                        )
+                    )
+                    for itm in ord_data.get("items", []):
+                        execute_dml(
+                            conn,
+                            """
+                            INSERT INTO BB_ORDER_ITEMS 
+                            (order_id, sku_id, item_name, quantity, unit_price, cake_base, cake_weight, custom_message)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                oid,
+                                itm.get("sku_id", ""),
+                                itm.get("item_name", "Bakery Item"),
+                                int(itm.get("quantity", 1)),
+                                float(itm.get("unit_price", 0.0)),
+                                itm.get("cake_base", "Khoaa (Eggless)"),
+                                itm.get("cake_weight", "1.0kg"),
+                                itm.get("custom_message", "")
+                            )
+                        )
+                    print(f"  -> Seeded active order #{oid} for '{ord_data.get('customer_name')}' from data/sample_orders.json.")
+        except Exception as e:
+            print(f"  -> Order seeding status: {e}")
 
 def get_sample_bakery_documents():
-    """Returns curated domain knowledge chunks for Shri Ram Baker (Mathura)."""
-    return [
-        {
-            "id": "CAKE_BB-RED-01-1kg",
-            "text": "Red Velvet Crimson Crumb Crown (SKU: BB-RED-01-1kg). Category: ACE. Flavor: Red Velvet. Weight: 1.0kg. Price: Rs 649.0. Visual: Deep crimson cocoa sponge, rich vanilla cream cheese swirl, velvet crumb dusting. Available bases: Khoaa (Eggless), Pure Veg Eggless, Chocolate Eggless, Egg. Preparation time: Standard 3-4 hours fresh baking wait time.",
-            "metadata": {
-                "sku_id": "BB-RED-01-1kg",
-                "name": "Red Velvet Crimson Crumb Crown",
-                "flavor": "Red Velvet",
-                "price": 649.0,
-                "weight_kg": 1.0,
-                "category": "ACE",
-                "image_url": "/catalog_images/CAKES_BRANDED/ACE/Red%20Velvet/BAKEBOX_ACE_RedVelvet_01.jpg"
-            }
-        },
-        {
-            "id": "CAKE_BB-RED-02-1kg",
-            "text": "Red Velvet Heart Love Affair (SKU: BB-RED-02-1kg). Category: ACE. Flavor: Red Velvet. Weight: 1.0kg. Price: Rs 649.0. Visual: Romantic heart-shaped crimson crumb velvet with golden edible shimmer and chocolate curls. Available bases: Khoaa (Eggless), Pure Veg Eggless, Chocolate Eggless. Preparation time: Standard 3-4 hours fresh baking wait time.",
-            "metadata": {
-                "sku_id": "BB-RED-02-1kg",
-                "name": "Red Velvet Heart Love Affair",
-                "flavor": "Red Velvet",
-                "price": 649.0,
-                "weight_kg": 1.0,
-                "category": "ACE",
-                "image_url": "/catalog_images/CAKES_BRANDED/ACE/Red%20Velvet/BAKEBOX_ACE_RedVelvet_02.jpg"
-            }
-        },
+    """
+    Returns curated domain knowledge chunks for Shri Ram Baker (Mathura).
+    Dynamically loads product specifications from data/sample_catalog.json and operational policies.
+    """
+    documents = []
+    seen_ids = set()
+
+    # 1. Load active catalog from data/sample_catalog.json
+    catalog_file = os.path.join(_pkg_root, "data", "sample_catalog.json")
+    if os.path.isfile(catalog_file):
+        try:
+            with open(catalog_file, "r", encoding="utf-8") as f:
+                cat_items = json.load(f)
+            for item in cat_items:
+                doc_id = f"CAKE_{item['sku_id']}"
+                bases_str = ", ".join(item.get("available_bases", ["Khoaa (Eggless)"]))
+                text = (
+                    f"{item['name']} (SKU: {item['sku_id']}). Category: {item.get('category', 'ACE')}. "
+                    f"Flavor: {item.get('flavor', '')}. Weight: {item.get('weight_kg', 1.0)}kg. "
+                    f"Price: Rs {item.get('price', 0.0)}. Visual: {item.get('description', '')}. "
+                    f"Available bases: {bases_str}. Sweetness: {item.get('sweetness_level', 'Balanced')}. "
+                    f"Preparation time: Standard 3-4 hours fresh baking wait time."
+                )
+                documents.append({
+                    "id": doc_id,
+                    "text": text,
+                    "metadata": {
+                        "sku_id": item["sku_id"],
+                        "name": item["name"],
+                        "flavor": item.get("flavor", ""),
+                        "price": float(item.get("price", 0.0)),
+                        "weight_kg": float(item.get("weight_kg", 1.0)),
+                        "category": item.get("category", "ACE"),
+                        "image_url": f"/catalog_images/CAKES_BRANDED/{item.get('category', 'ACE')}/{item.get('flavor', '').replace(' ', '%20')}/{item['sku_id']}.jpg"
+                    }
+                })
+                seen_ids.add(doc_id)
+        except Exception as e:
+            print(f"[WARN] Error loading sample_catalog.json: {e}")
+
+    # 2. Supplementary catalog items and operational policies
+    supplementary = [
         {
             "id": "CAKE_BB-RED-05-1kg",
             "text": "Red Velvet Berry Fantasy (SKU: BB-RED-05-1kg). Category: ACE. Flavor: Red Velvet. Weight: 1.0kg. Price: Rs 649.0. Visual: Multi-layered velvet sponge infused with wild berry compote and whipped frosting. Available bases: Khoaa (Eggless), Pure Veg Eggless. Preparation time: Standard 3-4 hours fresh baking wait time.",
@@ -176,19 +237,6 @@ def get_sample_bakery_documents():
                 "weight_kg": 1.0,
                 "category": "ACE",
                 "image_url": "/catalog_images/CAKES_BRANDED/ACE/Red%20Velvet/BAKEBOX_ACE_RedVelvet_05.jpg"
-            }
-        },
-        {
-            "id": "CAKE_BB-BLK-01-05kg",
-            "text": "Black Forest Classic Cherry Gateau (SKU: BB-BLK-01-05kg). Category: ACE. Flavor: Black Forest. Weight: 0.5kg. Price: Rs 249.0. Visual: Rich chocolate layers soaked in sweet cherry syrup with whipped vanilla cream and dark chocolate curls. Available bases: Khoaa (Eggless), Eggless, Egg. Preparation time: Standard 3-4 hours fresh baking wait time.",
-            "metadata": {
-                "sku_id": "BB-BLK-01-05kg",
-                "name": "Black Forest Classic Cherry Gateau",
-                "flavor": "Black Forest",
-                "price": 249.0,
-                "weight_kg": 0.5,
-                "category": "ACE",
-                "image_url": "/catalog_images/CAKES_BRANDED/ACE/Black%20Forest/BAKEBOX_ACE_BlackForest_01.jpg"
             }
         },
         {
@@ -215,19 +263,6 @@ def get_sample_bakery_documents():
                 "weight_kg": 0.5,
                 "category": "ACE",
                 "image_url": "/catalog_images/CAKES_BRANDED/ACE/Black%20Forest/BAKEBOX_ACE_BlackForest_03.jpg"
-            }
-        },
-        {
-            "id": "CAKE_BB-PIN-01-05kg",
-            "text": "Pineapple Classic Spiral Mirror (SKU: BB-PIN-01-05kg). Category: ACE. Flavor: Pineapple. Weight: 0.5kg. Price: Rs 249.0. Visual: Golden yellow glazed pineapple sponge with real pineapple fruit chunks and maraschino cherries. Available bases: Khoaa (Eggless), Pure Veg Eggless. Preparation time: Standard 3-4 hours fresh baking wait time.",
-            "metadata": {
-                "sku_id": "BB-PIN-01-05kg",
-                "name": "Pineapple Classic Spiral Mirror",
-                "flavor": "Pineapple",
-                "price": 249.0,
-                "weight_kg": 0.5,
-                "category": "ACE",
-                "image_url": "/catalog_images/CAKES_BRANDED/ACE/Pineapple/BAKEBOX_ACE_Pineapple_01.jpg"
             }
         },
         {
@@ -259,8 +294,20 @@ def get_sample_bakery_documents():
             "id": "POLICY_SNACKS",
             "text": "Shri Ram Baker Savory Snacks & Hot Patties: We bake fresh oven patties including Aloo Patty (Rs 25), Paneer Patty (Rs 35), Tandoori Patty (Rs 40), and Cheese Mayo Patty (Rs 45), along with cookies, rusks, and celebration accessories.",
             "metadata": {"type": "store_info", "title": "Patties and Savory Snacks Menu"}
+        },
+        {
+            "id": "POLICY_HAPPINESS_GUARANTEE",
+            "text": "Shri Ram Baker Celebration Happiness Guarantee: 100% on-time dispatch guarantee for pre-scheduled cakes. If any cake design or flavor does not meet our verified quality benchmark, immediate replacement or kitchen store credit is issued within 30 minutes. Customer delight in Mathura is our family heritage.",
+            "metadata": {"type": "policy", "title": "Celebration Happiness Guarantee"}
         }
     ]
+
+    for doc in supplementary:
+        if doc["id"] not in seen_ids:
+            documents.append(doc)
+            seen_ids.add(doc["id"])
+
+    return documents
 
 def run_ingestion():
     """Main execution of the ingestion pipeline with explicit connection cleanup."""

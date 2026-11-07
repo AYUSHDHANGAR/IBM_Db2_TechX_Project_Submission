@@ -180,20 +180,18 @@ class Db2HybridRRFRetriever(BaseRetriever):
             except Exception:
                 tfidf_ranked_ids = []
 
-        # 4. Multi-Channel Reciprocal Rank Fusion (RRF: k=60)
+        # 4. Multi-Channel Reciprocal Rank Fusion (RRF: k=60) via reusable compute_rrf_score
+        all_candidates = set(dense_ranked_ids) | set(bm25_ranked_ids) | set(tfidf_ranked_ids)
+        dense_rank_map = {doc_id: r for r, doc_id in enumerate(dense_ranked_ids)}
+        bm25_rank_map = {doc_id: r for r, doc_id in enumerate(bm25_ranked_ids)}
+        tfidf_rank_map = {doc_id: r for r, doc_id in enumerate(tfidf_ranked_ids)}
+
         rrf_scores: Dict[str, float] = {}
-
-        # Dense ranking contribution (IBM Db2)
-        for rank, doc_id in enumerate(dense_ranked_ids):
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + (1.0 / (self.rrf_k + rank + 1))
-
-        # BM25 ranking contribution
-        for rank, doc_id in enumerate(bm25_ranked_ids):
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + (1.0 / (self.rrf_k + rank + 1))
-
-        # TF-IDF ranking contribution
-        for rank, doc_id in enumerate(tfidf_ranked_ids):
-            rrf_scores[doc_id] = rrf_scores.get(doc_id, 0.0) + (1.0 / (self.rrf_k + rank + 1))
+        for doc_id in all_candidates:
+            rrf_scores[doc_id] = compute_rrf_score(
+                [dense_rank_map.get(doc_id), bm25_rank_map.get(doc_id), tfidf_rank_map.get(doc_id)],
+                k=self.rrf_k
+            )
 
         # Sort candidate documents by fused RRF score
         sorted_candidates = sorted(rrf_scores.items(), key=lambda x: x[1], reverse=True)[:top_k]

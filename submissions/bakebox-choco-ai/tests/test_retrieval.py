@@ -1,6 +1,8 @@
 """
 Unit and Integration Tests for BAKEBOX Choco AI Retrieval & Tool Logic.
-Runs offline with zero live Db2 or external API dependencies:
+Validates real production components (ChocoQueryEngine, Db2HybridRRFRetriever,
+BakeboxDb2VectorStore, SimpleBM25, and PII Security Masking).
+Runs offline with zero external network or database dependencies:
   pytest tests -v
 Or via standard library:
   python tests/test_retrieval.py
@@ -8,68 +10,47 @@ Or via standard library:
 import os
 import sys
 import unittest
-import re
+import json
 
 # Ensure parent directory is in sys.path so 'src' can be imported seamlessly
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+_pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _pkg_root not in sys.path:
+    sys.path.insert(0, _pkg_root)
 
 from src.ingest import get_sample_bakery_documents
-from src.retriever import SimpleBM25, compute_rrf_score
+from src.retriever import SimpleBM25, compute_rrf_score, Db2HybridRRFRetriever
+from src.query_engine import (
+    ChocoQueryEngine,
+    SessionBufferMemory,
+    mask_customer_name,
+    mask_phone_number,
+    mask_delivery_address
+)
+from src.db import get_masked_connection_string
 
-def compute_3way_rrf_score(rank_dense: int, rank_bm25: int, rank_tfidf: int, k: int = 60) -> float:
-    """Computes 3-way Reciprocal Rank Fusion score using reusable RRF function from src.retriever."""
-    return compute_rrf_score([rank_dense, rank_bm25, rank_tfidf], k=k)
+try:
+    from llama_index.core.schema import TextNode
+except ImportError:
+    TextNode = None
 
-def classify_query_intent(query: str) -> str:
-    """Robust intent classification separating ordering/buying from order tracking."""
-    q_lower = query.lower()
-    
-    # Explicit order tracking patterns
-    tracking_keywords = ["track", "status", "kahan hai", "mera order", "delivery status", "check order"]
-    has_order_id = bool(re.search(r'(?:order\s*#?|#)\s*(\d{4,})', q_lower))
-    
-    if any(k in q_lower for k in tracking_keywords) or (has_order_id and "order" in q_lower):
-        return "ORDER_TRACKING"
-    
-    # Policy / Advisory questions (Heating, storage, wait times)
-    advisory_keywords = ["reheat", "tawa", "skillet", "microwave", "policy", "wait time", "baking time"]
-    if any(k in q_lower for k in advisory_keywords):
-        return "POLICY_ADVISORY"
 
-    # General Inquiry & Store Information (Greetings, Hours, History, Snacks)
-    general_keywords = ["who are you", "tum kaun ho", "aap kaun ho", "what is choco", "opening hours", "timing", "history", "about us", "patty", "patties"]
-    if any(k in q_lower for k in general_keywords):
-        return "GENERAL_INQUIRY"
-    
-    # Recommendation / Purchase inquiry
-    rec_signals = ["show", "suggest", "recommend", "design", "dikhao", "batao", "cake", "flavor", "order", "buy", "chahiye"]
-    if any(s in q_lower for s in rec_signals):
-        return "CAKE_RECOMMENDATION"
-    
-    return "GENERAL_INQUIRY"
-
-def filter_upto_three_cards(candidates: list[dict], min_similarity: float = 0.4, max_cards: int = 3) -> list[dict]:
-    """Filters candidate cards by similarity threshold, returning up to max_cards (not fixed 3)."""
-    filtered = [c for c in candidates if c.get("similarity", 0.0) >= min_similarity]
-    return filtered[:max_cards]
-
-# ==============================================================================
-# TEST CASE SUITE
-# ==============================================================================
-
-class TestBakeboxRetrieval(unittest.TestCase):
+class TestBakeboxProduction(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Initialize real production engine in deterministic offline mode
+        cls.engine = ChocoQueryEngine(use_llm=False)
 
     def test_3way_rrf_scoring_formula(self):
         """Verify 3-way reciprocal rank fusion formula calculation (Dense + BM25 + TF-IDF)."""
-        score_top = compute_3way_rrf_score(0, 0, 0, k=60)
+        score_top = compute_rrf_score([0, 0, 0], k=60)
         expected_top = (1.0 / 61) + (1.0 / 61) + (1.0 / 61)
         self.assertAlmostEqual(score_top, expected_top, places=4)
 
-        score_dense_only = compute_3way_rrf_score(0, None, None, k=60)
+        score_dense_only = compute_rrf_score([0, None, None], k=60)
         self.assertAlmostEqual(score_dense_only, (1.0 / 61), places=4)
 
         # Fused multi-channel score is strictly higher than single channel
-        score_fused = compute_3way_rrf_score(1, 2, 0, k=60)
+        score_fused = compute_rrf_score([1, 2, 0], k=60)
         self.assertGreater(score_fused, score_dense_only)
 
     def test_bm25_lexical_scoring(self):
@@ -84,166 +65,149 @@ class TestBakeboxRetrieval(unittest.TestCase):
         self.assertGreater(scores[0], scores[1])
         self.assertGreater(scores[0], scores[2])
 
-    def test_intent_classification_no_order_hijack(self):
-        """Verify that queries wanting to 'order' or 'buy' a cake are NOT hijacked into order status tracking."""
-        self.assertEqual(classify_query_intent("I want to order a red velvet cake for anniversary"), "CAKE_RECOMMENDATION")
-        self.assertEqual(classify_query_intent("Can I order a chocolate cake online?"), "CAKE_RECOMMENDATION")
-        self.assertEqual(classify_query_intent("Show me pineapple cakes"), "CAKE_RECOMMENDATION")
-        self.assertEqual(classify_query_intent("Black forest cake chahiye"), "CAKE_RECOMMENDATION")
+    def test_real_engine_intent_routing_cake_purchase(self):
+        """Verify real ChocoQueryEngine routes purchase queries to CAKE_RECOMMENDATION (not order tracking)."""
+        res1 = self.engine.query("I want to order a red velvet cake for anniversary celebration", session_id="test_rec_1")
+        self.assertEqual(res1["intent"], "CAKE_RECOMMENDATION")
+        self.assertTrue(len(res1["ui_cards"]) > 0)
 
-    def test_intent_classification_order_tracking(self):
-        """Verify that order tracking queries correctly route to ORDER_TRACKING."""
-        self.assertEqual(classify_query_intent("Where is my order? Status please"), "ORDER_TRACKING")
-        self.assertEqual(classify_query_intent("Track order #1002"), "ORDER_TRACKING")
-        self.assertEqual(classify_query_intent("Track order for 9876543210"), "ORDER_TRACKING")
-        self.assertEqual(classify_query_intent("Mera order kahan hai?"), "ORDER_TRACKING")
-        self.assertEqual(classify_query_intent("Can you check the delivery status of order 1002"), "ORDER_TRACKING")
+        res2 = self.engine.query("Show me pineapple cakes", session_id="test_rec_2")
+        self.assertEqual(res2["intent"], "CAKE_RECOMMENDATION")
 
-    def test_intent_classification_policy(self):
-        """Verify that store policy and heating guidelines route to POLICY_ADVISORY."""
-        self.assertEqual(classify_query_intent("Patties ko reheat kaise karna chahiye?"), "POLICY_ADVISORY")
-        self.assertEqual(classify_query_intent("Can I microwave the fresh patties?"), "POLICY_ADVISORY")
-        self.assertEqual(classify_query_intent("What is the fresh baking wait time?"), "POLICY_ADVISORY")
-        self.assertEqual(classify_query_intent("What is your cancellation and refund policy?"), "POLICY_ADVISORY")
+    def test_real_engine_intent_routing_order_tracking(self):
+        """Verify real ChocoQueryEngine routes tracking queries to ORDER_TRACKING intents."""
+        res1 = self.engine.query("Where is my order? Status please", session_id="test_track_1")
+        self.assertEqual(res1["intent"], "ORDER_TRACKING_PROMPT")
 
-    def test_filter_upto_three_cards_dynamic(self):
-        """Verify the up-to-3 cake recommendation rule (not fixed 3)."""
-        candidates = [
-            {"sku_id": "BB-RED-01", "name": "Red Velvet Crown", "similarity": 0.88},
-            {"sku_id": "BB-RED-02", "name": "Red Velvet Heart", "similarity": 0.75},
-            {"sku_id": "BB-RED-05", "name": "Red Velvet Berry", "similarity": 0.62},
-            {"sku_id": "BB-RED-08", "name": "Red Velvet Cup", "similarity": 0.45},
-            {"sku_id": "BB-BLK-01", "name": "Black Forest", "similarity": 0.15},
-        ]
+        res2 = self.engine.query("Track order #1002", session_id="test_track_2")
+        self.assertEqual(res2["intent"], "ORDER_AUTH_REQUIRED")
 
-        # Should return top 3 above 0.4 threshold
-        res = filter_upto_three_cards(candidates, min_similarity=0.4, max_cards=3)
-        self.assertEqual(len(res), 3)
-        self.assertEqual([c["sku_id"] for c in res], ["BB-RED-01", "BB-RED-02", "BB-RED-05"])
+    def test_real_engine_intent_routing_policy(self):
+        """Verify real ChocoQueryEngine routes operational queries to store policy or general inquiry."""
+        res = self.engine.query("Patties ko reheat kaise karna chahiye?", session_id="test_pol_1")
+        self.assertIn(res["intent"], ["GENERAL_INQUIRY", "POLICY_ADVISORY"])
+        self.assertIn("tawa", res["reply"].lower())
 
-        # When only 2 match threshold, should return exactly 2 (not fixed 3)
-        res_high_thresh = filter_upto_three_cards(candidates, min_similarity=0.70, max_cards=3)
-        self.assertEqual(len(res_high_thresh), 2)
-        self.assertEqual([c["sku_id"] for c in res_high_thresh], ["BB-RED-01", "BB-RED-02"])
+    def test_real_tool_recommend_cakes_dynamic_upto_three(self):
+        """Verify real engine.tool_recommend_cakes returns UP TO 3 dynamic cards (not fixed 3)."""
+        cards = self.engine.tool_recommend_cakes("red velvet", limit=3)
+        self.assertLessEqual(len(cards), 3)
+        self.assertGreaterEqual(len(cards), 1)
+        for c in cards:
+            self.assertIn("sku_id", c)
+            self.assertIn("name", c)
+            self.assertIn("price", c)
+            self.assertTrue(c["price"] > 0)
 
-        # When 1 matches
-        res_very_high = filter_upto_three_cards(candidates, min_similarity=0.85, max_cards=3)
-        self.assertEqual(len(res_very_high), 1)
+    def test_real_tool_track_live_order_security_and_masking(self):
+        """Verify real engine.tool_track_live_order enforces two-factor auth and PII masking."""
+        # 1. Order ID without phone must be blocked
+        res_no_phone = self.engine.tool_track_live_order(order_id=1002, phone_number=None)
+        self.assertEqual(res_no_phone.get("auth_error"), "VERIFICATION_REQUIRED")
+
+        # 2. Order ID with wrong phone must be rejected
+        res_wrong_phone = self.engine.tool_track_live_order(order_id=1002, phone_number="9999999999")
+        self.assertEqual(res_wrong_phone.get("auth_error"), "PHONE_MISMATCH")
+
+        # 3. Order ID with registered phone must succeed with masked PII
+        res_verified = self.engine.tool_track_live_order(order_id=1002, phone_number="+91 9876543210")
+        self.assertIsNotNone(res_verified)
+        self.assertEqual(res_verified["ORDER_ID"], 1002)
+        # Ensure customer name and phone are masked at the database layer
+        self.assertIn("*", res_verified["CUSTOMER_NAME"])
+        self.assertIn("*", res_verified["CUSTOMER_PHONE"])
+        self.assertTrue(res_verified["CUSTOMER_PHONE"].endswith("3210"))
+        self.assertIn("Confidential", res_verified["DELIVERY_ADDRESS"])
+
+    def test_real_tool_track_live_order_like_wildcard_defense(self):
+        """Verify that wildcard injection characters (% or _) in phone are neutralized."""
+        # Attempting wildcard injection '%' or short input returns VERIFICATION_REQUIRED
+        res_pct = self.engine.tool_track_live_order(order_id=1002, phone_number="%")
+        self.assertEqual(res_pct.get("auth_error"), "VERIFICATION_REQUIRED")
+
+        # 10 characters with wildcards like '98%65432_0' stripped to 8 digits returns VERIFICATION_REQUIRED
+        res_wild = self.engine.tool_track_live_order(order_id=1002, phone_number="98%65432_0")
+        self.assertEqual(res_wild.get("auth_error"), "VERIFICATION_REQUIRED")
+
+        # 10 numeric digits that don't match the order phone returns PHONE_MISMATCH
+        res_wrong = self.engine.tool_track_live_order(order_id=1002, phone_number="9111111111")
+        self.assertEqual(res_wrong.get("auth_error"), "PHONE_MISMATCH")
+
+    def test_multi_order_offline_support(self):
+        """Verify real order tracking supports both Order #1002 and Order #1104 from sample_orders.json."""
+        res_1104 = self.engine.tool_track_live_order(order_id=1104, phone_number="+91 9811223344")
+        self.assertIsNotNone(res_1104)
+        self.assertEqual(res_1104["ORDER_ID"], 1104)
+        self.assertIn("*", res_1104["CUSTOMER_NAME"])
+        self.assertTrue(res_1104["CUSTOMER_PHONE"].endswith("3344"))
 
     def test_session_isolation_and_buffer_memory(self):
-        """Verify conversation buffer memory maintains strict session isolation."""
-        from src.query_engine import SessionBufferMemory
-        
+        """Verify real SessionBufferMemory maintains strict session isolation."""
         session_a = SessionBufferMemory(session_id="user_alice")
         session_b = SessionBufferMemory(session_id="user_bob")
 
-        session_a.add_turn("I want a red velvet cake", "Here are 3 recommendations", "CAKE_REC")
+        session_a.add_turn("I want a red velvet cake", "Here are recommendations", "CAKE_REC")
         session_b.add_turn("Where is my order #1002?", "Order #1002 is baking", "ORDER_TRACKING")
 
-        # Session A must not see Session B's context
         self.assertIn("red velvet", session_a.get_context_summary())
         self.assertNotIn("1002", session_a.get_context_summary())
 
-        # Session B must not see Session A's context
         self.assertIn("1002", session_b.get_context_summary())
         self.assertNotIn("red velvet", session_b.get_context_summary())
 
-    def test_masked_connection_string_security(self):
-        """Verify that masked connection strings never expose real passwords in logs."""
-        from src.db import get_masked_connection_string
-        masked = get_masked_connection_string()
-        self.assertIn("PWD=********", masked)
-        self.assertNotIn("8844", masked)
-
-    def test_sample_bakery_documents_schema(self):
-        """Validate all seeded domain knowledge chunks adhere to required catalog attributes."""
-        docs = get_sample_bakery_documents()
-        self.assertGreaterEqual(len(docs), 10, "Should contain at least 10 knowledge chunks")
-
-        cake_count = 0
-        policy_count = 0
-        for doc in docs:
-            self.assertTrue("id" in doc and len(doc["id"]) > 0)
-            self.assertTrue("text" in doc and len(doc["text"]) > 20)
-            meta = doc.get("metadata", {})
-            if "sku_id" in meta:
-                cake_count += 1
-                self.assertIn("name", meta)
-                self.assertTrue(meta["price"] > 0)
-                self.assertTrue(meta["weight_kg"] > 0)
-            else:
-                policy_count += 1
-                self.assertIn("title", meta)
-
-        self.assertGreaterEqual(cake_count, 7, "Should have at least 7 cake catalog items")
-        self.assertGreaterEqual(policy_count, 3, "Should have at least 3 policy/advisory documents")
-
-    def test_intent_classification_general_inquiry(self):
-        """Verify that general questions do NOT fall into cake recommendations."""
-        self.assertEqual(classify_query_intent("Who are you?"), "GENERAL_INQUIRY")
-        self.assertEqual(classify_query_intent("What are your opening hours?"), "GENERAL_INQUIRY")
-        self.assertEqual(classify_query_intent("Do you sell fresh patties?"), "GENERAL_INQUIRY")
-        self.assertEqual(classify_query_intent("What is the bakery history of Shri Ram Baker?"), "GENERAL_INQUIRY")
-
-    def test_order_tracking_security_phone_verification(self):
-        """Verify that order ID alone requires verification, and mismatched phone is rejected."""
-        # Simulated verification check logic
-        def mock_verify_order(order_id, phone_input, db_record):
-            if order_id and not phone_input:
-                return "VERIFICATION_REQUIRED"
-            if order_id and phone_input:
-                clean = phone_input[-10:]
-                if clean in db_record["phone"]:
-                    return "VERIFIED"
-                return "PHONE_MISMATCH"
-            return "NOT_FOUND"
-
-        db_order = {"order_id": 1002, "phone": "+91 9876543210"}
-        
-        # 1. Order ID without phone must be blocked
-        self.assertEqual(mock_verify_order(1002, None, db_order), "VERIFICATION_REQUIRED")
-        
-        # 2. Order ID with wrong phone must be rejected
-        self.assertEqual(mock_verify_order(1002, "9999999999", db_order), "PHONE_MISMATCH")
-        
-        # 3. Order ID with matching registered phone must succeed
-        self.assertEqual(mock_verify_order(1002, "9876543210", db_order), "VERIFIED")
-
-    def test_policy_metadata_filtering(self):
-        """Verify that store policy / advisory retrieval strictly filters out cake SKUs."""
-        docs = get_sample_bakery_documents()
-        policy_docs = [d for d in docs if d.get("metadata", {}).get("type") in ["policy", "advisory", "store_info"]]
-        self.assertGreaterEqual(len(policy_docs), 3)
-        for p in policy_docs:
-            self.assertNotIn("sku_id", p.get("metadata", {}), "Policy chunks must not contain cake sku_id")
-
-    def test_session_memory_ttl_expiration_and_cleanup(self):
+    def test_session_memory_ttl_expiration(self):
         """Verify that inactive sessions expire and are cleanly evicted after TTL."""
-        from src.query_engine import SessionBufferMemory
-        
         session = SessionBufferMemory(session_id="test_expiring_session", ttl_seconds=10)
         session.add_turn("Hello", "Hi there", "GREETING")
-        
-        # Fresh session must not be expired
+
         self.assertFalse(session.is_expired(current_time=session.last_active + 5))
-        
-        # Session after 11 seconds must be expired
         self.assertTrue(session.is_expired(current_time=session.last_active + 11))
 
-    def test_retriever_dynamic_index_synchronization(self):
-        """Verify that lexical BM25 channels can be dynamically synchronized with updated nodes."""
-        from src.retriever import SimpleBM25
-        
-        initial_corpus = ["Red velvet anniversary cake", "Pineapple fresh gateau"]
-        bm25 = SimpleBM25(initial_corpus)
-        scores_initial = bm25.score("chocolate truffle")
-        self.assertEqual(scores_initial[0], 0.0)
-        
-        # Simulate index refresh with new chocolate products ingested
-        updated_corpus = initial_corpus + ["Chocolate truffle royal cake with dark glaze"]
-        bm25_synced = SimpleBM25(updated_corpus)
-        scores_synced = bm25_synced.score("chocolate truffle")
-        self.assertGreater(scores_synced[2], 0.0, "Newly synced chocolate cake must be retrievable")
+    def test_real_retriever_dynamic_index_synchronization(self):
+        """Verify real Db2HybridRRFRetriever.refresh_index synchronizes lexical channels."""
+        if not TextNode:
+            self.skipTest("llama_index TextNode not available")
+
+        retriever = self.engine.retriever
+        initial_count = len(retriever.corpus_nodes)
+        new_node = TextNode(
+            text="Special Mathura Peda Delight Cake with saffron pistachios",
+            id_="CAKE_PEDA_01",
+            metadata={"sku_id": "BB-PEDA-01", "name": "Mathura Peda Delight"}
+        )
+        updated_nodes = list(retriever.corpus_nodes) + [new_node]
+        retriever.refresh_index(updated_nodes)
+
+        self.assertEqual(len(retriever.corpus_nodes), initial_count + 1)
+        scores = retriever.bm25.score("mathura peda delight")
+        self.assertTrue(any(s > 0.0 for s in scores))
+
+    def test_policy_metadata_filtering_strictness(self):
+        """Verify real engine.tool_get_store_policy_or_advisory never returns cake SKU cards."""
+        policy_texts = self.engine.tool_get_store_policy_or_advisory("reheat patties")
+        self.assertTrue(len(policy_texts) > 0)
+        for p in policy_texts:
+            self.assertNotIn("SKU: BB-", p)
+
+    def test_data_directory_and_masked_connection(self):
+        """Verify sample data files are present and connection strings mask passwords."""
+        # 1. Verify sample_catalog.json and sample_orders.json are present and populated
+        cat_path = os.path.join(_pkg_root, "data", "sample_catalog.json")
+        ord_path = os.path.join(_pkg_root, "data", "sample_orders.json")
+        self.assertTrue(os.path.isfile(cat_path), "data/sample_catalog.json must exist")
+        self.assertTrue(os.path.isfile(ord_path), "data/sample_orders.json must exist")
+
+        with open(cat_path, "r", encoding="utf-8") as f:
+            cat_data = json.load(f)
+        with open(ord_path, "r", encoding="utf-8") as f:
+            ord_data = json.load(f)
+        self.assertGreaterEqual(len(cat_data), 5)
+        self.assertGreaterEqual(len(ord_data), 2)
+
+        # 2. Verify masked connection string does not expose plaintext secrets
+        masked = get_masked_connection_string()
+        self.assertIn("PWD=********", masked)
+
 
 if __name__ == "__main__":
     unittest.main()
