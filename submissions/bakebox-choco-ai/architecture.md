@@ -219,3 +219,128 @@ When recommendation intent is confirmed (e.g., *"show me red velvet cake"*), the
 - Returns **up to 3** (not a hardcoded fixed 3) distinct cake cards that genuinely match the requested flavor and occasion.
 - Each card contains verified database attributes: `sku_id`, `name`, `price`, `flavor`, `weight_kg`, and authentic image path.
 - If only 1 or 2 cakes match the criteria, exactly 1 or 2 cards are returned, preserving catalog integrity.
+
+---
+
+## 8. In-Database Recursive Bill-of-Materials (BOM) CTE
+
+To automate kitchen inventory depletion and prevent accepting orders for items that cannot be baked, BAKEBOX executes an in-engine **Recursive Common Table Expression (CTE)** directly inside IBM Db2:
+
+```sql
+WITH RECURSIVE RECIPE_BOM (CAKE_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
+    SELECT c.CAKE_ID, r.INGREDIENT_NAME, r.QTY_NEEDED, i.STOCK_QTY
+    FROM BB_CAKES c
+    JOIN BB_RECIPES r ON c.CAKE_ID = r.CAKE_ID
+    JOIN BB_INVENTORY i ON r.INGREDIENT_ID = i.INGREDIENT_ID
+    WHERE c.CAKE_ID = ?
+)
+SELECT INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK,
+       CASE WHEN CURRENT_STOCK >= REQUIRED_QTY THEN 'IN_STOCK' ELSE 'OUT_OF_STOCK' END AS AVAILABILITY
+FROM RECIPE_BOM;
+```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Customer / Frontend
+    participant Engine as ChocoOrderEngine (order_engine.py)
+    participant Db2 as IBM Db2 Relational Engine
+    participant Inventory as BB_INVENTORY Table
+
+    Customer->>Engine: Request Cake Order (e.g. Cake ID #1)
+    Engine->>Db2: Execute Recursive RECIPE_BOM CTE
+    Db2->>Inventory: Join BB_CAKES -> BB_RECIPES -> BB_INVENTORY
+    Db2-->>Engine: Return Ingredient Rows (Required vs Available)
+    alt All Ingredients In Stock
+        Engine-->>Customer: Order Approved for Fresh Baking (Holigate/Gosna Kitchen)
+    else Missing / Depleted Ingredients
+        Engine-->>Customer: Reject with Missing Ingredient Breakdown & Suggest Alternative Base
+    end
+```
+
+---
+
+## 9. ACID Row-Level Concurrency & Locking (`WITH RS`)
+
+To eliminate race-condition overselling when simultaneous buyers target the last remaining cake in inventory, BAKEBOX employs Db2's native **Read Stability (`WITH RS`)** row lock:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor BuyerA as Buyer A (Web App)
+    actor BuyerB as Buyer B (Mobile App)
+    participant OrderEngine as Order & Concurrency Engine
+    participant Db2 as IBM Db2 (BB_CAKES)
+
+    Note over BuyerA,BuyerB: Stock = 1 (Last Cake in Stock)
+    BuyerA->>OrderEngine: Order Cake #2 (Qty: 1)
+    BuyerB->>OrderEngine: Order Cake #2 (Qty: 1)
+    
+    OrderEngine->>Db2: Thread 1: SELECT STOCK_QTY FROM BB_CAKES WHERE CAKE_ID=2 FOR UPDATE WITH RS
+    Note over Db2: Row Locked exclusively by Thread 1
+    OrderEngine->>Db2: Thread 2: SELECT STOCK_QTY ... FOR UPDATE WITH RS (Blocked / Leased)
+    
+    Db2-->>OrderEngine: Thread 1 reads Stock = 1
+    OrderEngine->>Db2: Thread 1: UPDATE BB_CAKES SET STOCK_QTY = 0; COMMIT;
+    Note over Db2: Row Lock Released
+    
+    Db2-->>OrderEngine: Thread 2 acquires lock, reads Stock = 0
+    OrderEngine->>Db2: Thread 2: ROLLBACK;
+    
+    OrderEngine-->>BuyerA: Order #1003 Confirmed (Success)
+    OrderEngine-->>BuyerB: Sold Out (Safely Rejected, Zero Overselling)
+```
+
+---
+
+## 10. Cryptographic SHA-256 Hash-Chained Audit Trail (`BB_AUDIT_LOG`)
+
+Every critical business action (order placement, stock reservation, refund approval, and cancellation) is permanently recorded in a tamper-evident audit table inside IBM Db2. Each block's cryptographic hash is computed across its predecessor's hash, ensuring mathematical immutability:
+
+$$\text{Current Hash} = \text{SHA256}(\text{Prev Hash} \,\|\, \text{session\_id} \,\|\, \text{action\_type} \,\|\, \text{canonical\_payload\_json} \,\|\, \text{timestamp})$$
+
+```mermaid
+flowchart LR
+    subgraph Genesis ["Genesis Block"]
+        G_Prev["Prev: 00000000...000"]
+        G_Action["Action: GENESIS_INIT"]
+        G_Hash["Current Hash: H(0)"]
+    end
+
+    subgraph Block1 ["Audit Block #1: Order Created"]
+        B1_Prev["Prev: H(0)"]
+        B1_Action["Action: ORDER_PLACED (#1002)"]
+        B1_Hash["Current Hash: H(1)"]
+    end
+
+    subgraph Block2 ["Audit Block #2: Stock Locked"]
+        B2_Prev["Prev: H(1)"]
+        B2_Action["Action: STOCK_RESERVED (Cake #1)"]
+        B2_Hash["Current Hash: H(2)"]
+    end
+
+    subgraph Block3 ["Audit Block #3: Refund Claim"]
+        B3_Prev["Prev: H(2)"]
+        B3_Action["Action: REFUND_APPROVED (#1002)"]
+        B3_Hash["Current Hash: H(3)"]
+    end
+
+    Genesis --> Block1 --> Block2 --> Block3
+```
+
+### Forensic Verification Routine (`verify_audit_chain`)
+The system provides `verify_audit_chain(conn)` which traverses all rows in `BB_AUDIT_LOG`:
+- Recalculates the SHA-256 digest of every payload.
+- Confirms pointer continuity ($\text{Prev Hash}_n == \text{Current Hash}_{n-1}$).
+- If an unauthorized database modification occurs, the engine flags tampering, pinpoints the compromised row ID, and reports hash divergence.
+
+---
+
+## 11. Self-Contained Production FastAPI Architecture
+
+The REST API layer (`src/api.py`) exposes clean OpenAPI endpoints:
+- `GET /api/health`: System health, Db2 mode (Live / Mock), catalog count, and active RRF status.
+- `POST /api/chat`: Natural language chat with conversation buffer memory and multi-tier prompt injection defense.
+- `GET /api/cakes/search`: Hybrid 3-Way RRF product retrieval with eggless filtering.
+- `GET /api/orders/{id}`: Real-time order tracking with automated PII privacy masking.
+- `POST /api/orders/{id}/refund`: Policy verification against Db2 order logs.

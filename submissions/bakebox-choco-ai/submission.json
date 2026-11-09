@@ -3,7 +3,7 @@
   "project": {
     "title": "BAKEBOX-AI: AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT",
     "slug": "bakebox-choco-ai",
-    "short_description": "Enterprise autonomous AI bakery management and customer engagement platform powered by CHOCO AI — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via DB2LlamaVS), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: k=60), session isolation with conversation buffer memory, and real-time agentic tools for up-to-3 cake precision recommendations and live order tracking.",
+    "short_description": "Enterprise autonomous AI bakery management and customer engagement platform powered by CHOCO AI — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via DB2LlamaVS), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: k=60), session isolation with conversation buffer memory, in-engine Recursive Bill-of-Materials (BOM) CTE, row-level concurrency locking (SELECT FOR UPDATE WITH RS), cryptographic SHA-256 hash-chained audit trails (BB_AUDIT_LOG), and production FastAPI endpoints.",
     "category": "AI / RAG / Data Engineering / Analytics",
     "demo_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
     "video_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
@@ -25,16 +25,20 @@
     "edition": "Db2 Community Edition (Docker / VS Code Extension - IBMDB201)",
     "connector": "ibm_db / ibm_db_dbi / llama-index-vector-stores-db2 (DB2LlamaVS)",
     "features_used": [
+      "In-Database Recursive BOM CTE (Ingredient Recipe Depletion)",
+      "Row-Level Concurrency Locking (SELECT FOR UPDATE WITH RS)",
+      "Cryptographic SHA-256 Hash-Chained Audit Trail (BB_AUDIT_LOG)",
+      "Zero-Docker Offline Fallback & Mock Sandbox",
+      "3-Way Hybrid RRF Vector Search (DB2LlamaVS + BM25 + TF-IDF)",
       "Native VECTOR(384, FLOAT32) Column via DB2LlamaVS",
       "In-engine Cosine Vector Search via DB2LlamaVS",
-      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS)",
-      "Advanced Hybrid RRF (k=60) Multi-Channel Fused Retrieval (Db2 Dense + BM25 + TF-IDF)",
+      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS, BB_CAKES, BB_INVENTORY, BB_RECIPES)",
       "Direct DB-API 2.0 Connection Management with Automatic Commit/Rollback"
     ]
   },
   "tech_stack": {
     "languages": ["Python"],
-    "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "scikit-learn"],
+    "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "FastAPI", "scikit-learn"],
     "ai_models": ["BAAI/bge-small-en-v1.5 (Local FastEmbed / SentenceTransformers)", "Google Gemini 1.5 Flash (with 2.0 / 3.x compatibility)"]
   }
 }

@@ -32,9 +32,17 @@ try:
     from llama_index.core.vector_stores.types import VectorStoreQuery
 except ImportError:
     class BaseRetriever:
-        pass
-    NodeWithScore = None
-    TextNode = None
+        def retrieve(self, str_or_bundle):
+            return self._retrieve(str_or_bundle)
+    class TextNode:
+        def __init__(self, text: str = "", id_: str = None, metadata: dict = None):
+            self.text = text
+            self.id_ = id_ or str(hash(text))
+            self.metadata = metadata or {}
+    class NodeWithScore:
+        def __init__(self, node: Any = None, score: float = 0.0):
+            self.node = node
+            self.score = score
     VectorStoreQuery = None
 
 from src.vector_store import BakeboxDb2VectorStore
@@ -120,9 +128,21 @@ class Db2HybridRRFRetriever(BaseRetriever):
             self.fast_model = TextEmbedding(model_name=model_name)
             self.embed_func = lambda q: list(self.fast_model.embed([q]))[0].tolist()
         else:
-            from sentence_transformers import SentenceTransformer
-            self.st_model = SentenceTransformer(model_name)
-            self.embed_func = lambda q: self.st_model.encode(q).tolist()
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.st_model = SentenceTransformer(model_name)
+                self.embed_func = lambda q: self.st_model.encode(q).tolist()
+            except ImportError:
+                # Deterministic zero-dependency offline pseudo-embedding (384-dim normalized vector)
+                def _fallback_embed(q: str) -> List[float]:
+                    import hashlib
+                    vec = []
+                    for i in range(384):
+                        h = int(hashlib.md5(f"{q}_{i}".encode()).hexdigest()[:8], 16)
+                        vec.append((h / 0xFFFFFFFF) * 2.0 - 1.0)
+                    norm = (sum(x * x for x in vec)) ** 0.5 or 1.0
+                    return [x / norm for x in vec]
+                self.embed_func = _fallback_embed
 
         # 2. Sparse Lexical Engine A: Okapi BM25
         self.bm25 = SimpleBM25(self.corpus_texts) if self.corpus_texts else None
@@ -134,6 +154,10 @@ class Db2HybridRRFRetriever(BaseRetriever):
         else:
             self.tfidf = None
             self.tfidf_matrix = None
+
+    def retrieve(self, query_bundle) -> List[NodeWithScore]:
+        """Public retrieve method compatible with LlamaIndex BaseRetriever contract."""
+        return self._retrieve(query_bundle)
 
     def _retrieve(self, query_bundle) -> List[NodeWithScore]:
         query_str = getattr(query_bundle, "query_str", str(query_bundle))

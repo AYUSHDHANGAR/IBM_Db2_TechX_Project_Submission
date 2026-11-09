@@ -57,7 +57,7 @@ except ImportError:
 
 from src.db import get_dbi_connection, execute_query, db_session
 from src.vector_store import BakeboxDb2VectorStore
-from src.retriever import Db2HybridRRFRetriever
+from src.retriever import Db2HybridRRFRetriever, TextNode
 from src.ingest import get_sample_bakery_documents
 
 # ==============================================================================

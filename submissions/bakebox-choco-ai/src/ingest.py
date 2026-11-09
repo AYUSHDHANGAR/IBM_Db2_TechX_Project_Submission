@@ -132,6 +132,133 @@ def init_relational_tables(conn):
         else:
             print(f"  [WARNING] Index IDX_BB_ITEM_ORDER creation: {e}")
 
+    # BB_CAKES Table (Live Cake Inventory with Row-Locking Support)
+    cakes_sql = """
+    CREATE TABLE BB_CAKES (
+        cake_id INT NOT NULL PRIMARY KEY,
+        name VARCHAR(256) NOT NULL,
+        sku_id VARCHAR(64) NOT NULL,
+        price DECIMAL(10, 2) NOT NULL,
+        stock_qty INT NOT NULL DEFAULT 5,
+        is_eggless_available SMALLINT DEFAULT 1
+    )
+    """
+    try:
+        execute_dml(conn, cakes_sql)
+        print("  -> Table BB_CAKES created successfully.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_CAKES already exists (retained).")
+        else:
+            print(f"  [WARNING] BB_CAKES creation: {e}")
+
+    # BB_INVENTORY Table (Raw Bakery Ingredients)
+    inventory_sql = """
+    CREATE TABLE BB_INVENTORY (
+        ingredient_id INT NOT NULL PRIMARY KEY,
+        ingredient_name VARCHAR(128) NOT NULL,
+        stock_qty DECIMAL(10, 2) NOT NULL DEFAULT 0.0,
+        unit VARCHAR(32) DEFAULT 'kg'
+    )
+    """
+    try:
+        execute_dml(conn, inventory_sql)
+        print("  -> Table BB_INVENTORY created successfully.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_INVENTORY already exists (retained).")
+        else:
+            print(f"  [WARNING] BB_INVENTORY creation: {e}")
+
+    # BB_RECIPES Table (Bill-of-Materials Join Table for In-Engine Recursive CTE)
+    recipes_sql = """
+    CREATE TABLE BB_RECIPES (
+        recipe_id INT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        cake_id INT NOT NULL,
+        ingredient_id INT NOT NULL,
+        ingredient_name VARCHAR(128) NOT NULL,
+        qty_needed DECIMAL(10, 2) NOT NULL,
+        CONSTRAINT FK_RECIPE_CAKE FOREIGN KEY (cake_id) REFERENCES BB_CAKES(cake_id) ON DELETE CASCADE,
+        CONSTRAINT FK_RECIPE_ING FOREIGN KEY (ingredient_id) REFERENCES BB_INVENTORY(ingredient_id) ON DELETE CASCADE
+    )
+    """
+    try:
+        execute_dml(conn, recipes_sql)
+        print("  -> Table BB_RECIPES created successfully.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_RECIPES already exists (retained).")
+        else:
+            print(f"  [WARNING] BB_RECIPES creation: {e}")
+
+    # BB_AUDIT_LOG Table (Cryptographic SHA-256 Hash-Chained Audit Trail)
+    audit_sql = """
+    CREATE TABLE BB_AUDIT_LOG (
+        log_id INT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        session_id VARCHAR(128) NOT NULL,
+        action_type VARCHAR(64) NOT NULL,
+        payload CLOB NOT NULL,
+        prev_hash VARCHAR(64) NOT NULL,
+        current_hash VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
+    )
+    """
+    try:
+        execute_dml(conn, audit_sql)
+        print("  -> Table BB_AUDIT_LOG created successfully.")
+    except Exception as e:
+        if _is_already_exists_error(e):
+            print("  -> Table BB_AUDIT_LOG already exists (retained).")
+        else:
+            print(f"  [WARNING] BB_AUDIT_LOG creation: {e}")
+
+    # Additional Indexes for High-Performance Queries
+    for idx_name, idx_sql in [
+        ("IDX_BB_AUDIT_PREV", "CREATE INDEX IDX_BB_AUDIT_PREV ON BB_AUDIT_LOG(prev_hash)"),
+        ("IDX_BB_AUDIT_CURR", "CREATE INDEX IDX_BB_AUDIT_CURR ON BB_AUDIT_LOG(current_hash)"),
+        ("IDX_BB_RECIPE_CAKE", "CREATE INDEX IDX_BB_RECIPE_CAKE ON BB_RECIPES(cake_id)")
+    ]:
+        try:
+            execute_dml(conn, idx_sql)
+            print(f"  -> Index {idx_name} created.")
+        except Exception as e:
+            if not _is_already_exists_error(e):
+                print(f"  [WARNING] Index {idx_name}: {e}")
+
+    # Native IBM Db2 Stored Procedure: SP_RESERVE_CAKE_STOCK
+    sp_sql = """
+    CREATE OR REPLACE PROCEDURE SP_RESERVE_CAKE_STOCK (
+        IN p_cake_id INT,
+        IN p_qty INT,
+        OUT p_success INT
+    )
+    LANGUAGE SQL
+    BEGIN
+        DECLARE v_current_stock INT DEFAULT 0;
+        SELECT stock_qty INTO v_current_stock
+        FROM BB_CAKES
+        WHERE cake_id = p_cake_id
+        FOR UPDATE WITH RS;
+        
+        IF v_current_stock >= p_qty THEN
+            UPDATE BB_CAKES
+            SET stock_qty = stock_qty - p_qty
+            WHERE cake_id = p_cake_id;
+            SET p_success = 1;
+            COMMIT;
+        ELSE
+            SET p_success = 0;
+            ROLLBACK;
+        END IF;
+    END
+    """
+    try:
+        execute_dml(conn, sp_sql)
+        print("  -> Stored Procedure SP_RESERVE_CAKE_STOCK registered in IBM Db2.")
+    except Exception as e:
+        if not _is_already_exists_error(e):
+            print(f"  [INFO] Stored procedure registration: {e}")
+
     # Seed sample orders dynamically from data/sample_orders.json
     orders_file = os.path.join(_pkg_root, "data", "sample_orders.json")
     if os.path.isfile(orders_file):
