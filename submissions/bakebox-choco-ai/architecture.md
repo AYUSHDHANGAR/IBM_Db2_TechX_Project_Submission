@@ -49,7 +49,7 @@ flowchart TD
         BufferMem["SessionBufferMemory (Conversation History Buffer)"]
         Dispatcher{"Agentic Tool Dispatcher"}
         
-        ToolRec["Agentic Tool 1: recommend_cakes()\n(Renders UP TO 3 JSON Cards via Cosine Similarity)"]
+        ToolRec["Agentic Tool 1: recommend_cakes()\n(Renders UP TO 3 JSON Cards via 3-Way RRF: Db2 Cosine + BM25 + TF-IDF)"]
         ToolOrder["Agentic Tool 2: track_live_order()\n(Real-Time Backend ACID Order Lookup)"]
         ToolPolicy["Agentic Tool 3: get_store_policy_or_advisory()\n(Domain Knowledge Retrieval)"]
         
@@ -215,7 +215,7 @@ If an active order is found in `BAKING` status at the Khatoti Kua kitchen, CHOCO
 ## 7. Up to 3 Cake Cards Recommendation (Agentic Tool 1)
 
 When recommendation intent is confirmed (e.g., *"show me red velvet cake"*), the engine enforces the **Up to 3 Cake Selection Rule**:
-- Evaluates candidate cakes retrieved by the hybrid RRF engine against a cosine similarity threshold.
+- Evaluates candidate cakes retrieved by the 3-Way Hybrid RRF engine against the relevance threshold (min_rrf_score >= 0.015).
 - Returns **up to 3** (not a hardcoded fixed 3) distinct cake cards that genuinely match the requested flavor and occasion.
 - Each card contains verified database attributes: `sku_id`, `name`, `price`, `flavor`, `weight_kg`, and authentic image path.
 - If only 1 or 2 cakes match the criteria, exactly 1 or 2 cards are returned, preserving catalog integrity.

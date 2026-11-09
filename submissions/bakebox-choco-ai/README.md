@@ -5,7 +5,7 @@
 
 > [!NOTE]
 > **Hackathon Submission Scope & Repository Structure:**  
-> In accordance with the IBM Db2 TechX submission guidelines, this pull request submission folder (`submissions/bakebox-choco-ai/`) contains the complete, self-contained Python LlamaIndex hybrid RAG pipeline, Db2 vector store, and transactional order integration in `src/` and test suite in `tests/`. The full-stack interactive React 18 Storefront and FastAPI backend server demonstrated in our project screenshots are showcased live in our [YouTube Video Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
+> In accordance with the IBM Db2 TechX submission guidelines, this pull request submission folder (`submissions/bakebox-choco-ai/`) contains the complete, self-contained Python LlamaIndex hybrid RAG pipeline, Db2 vector store, and transactional order integration in `src/` and test suite in `tests/`. The full-stack interactive React 18 Storefront and FastAPI backend server demonstrated in our project screenshots are showcased live in our [YouTube Video Demo](https://youtu.be/NLrRq6FX358?si=hjcFKSU-FCOhvToW).
 
 ---
 
@@ -32,36 +32,46 @@
 
 ## BAKEBOX - CHOCO AI: Dual-Perspective Overview
 
-### 1. The Core Problem Statement: Dual-Perspective Challenges
+### Description (What We Are)
+**BAKEBOX** is a next-generation, autonomous AI-powered bakery management platform featuring **CHOCO AI** — an intelligent conversational assistant. It serves as the digital and technological extension of our family-owned business, **Shri Ram Baker's**, which has been successfully operating in **Mathura for the past 20 years** with two established local branches in **Holigate** and **Gosna**.
 
-Traditional bakeries and food commerce platforms face operational and communication barriers that negatively affect both customers and store management:
-
-#### Customer-Facing Pain Points:
-- **Information Hesitation:** Customers frequently hesitate or feel awkward asking detailed questions about product specs, ingredients, allergen details, custom sizing, or base recommendations (e.g. Khoaa Eggless).
-- **Operational & Tracking Blind Spots:** Real-time order status tracking, delivery updates, and fresh baking wait times are often locked behind phone calls or delayed human customer support.
-- **Customer Care Availability Gaps:** Live customer support drops off drastically after 9 PM, leaving late-night craving inquiries, urgent modifications, and order tracking unaddressed.
-
-#### Management & Business-Facing Pain Points:
-- **Lost Sales & Conversion Bottlenecks:** Because human customer support agents are unavailable after hours or overwhelmed during peak times, bakeries fail to capture high-intent inquiries and late-night orders.
-- **Missed Upselling Opportunities:** Static menus cannot proactively recommend matching cakes or suggest appropriate base customizers according to the customer's specific celebration.
-- **Operational Inefficiencies:** Manually answering repetitive inquiries about baking wait times, patty reheating instructions, and order status drains staff bandwidth.
+### Vision
+While Shri Ram Baker's has traditionally served local customers through offline channels, we are building **BAKEBOX** to bridge the gap into the digital era, scaling our operations for online sales, real-time order tracking, and modern AI-driven inventory management.
 
 ---
 
-### 2. How CHOCO AI Solves Both Perspectives
+## 1. The Core Problem Statement (Dual-Perspective Challenges)
 
-When users interact with CHOCO AI, the platform bridges the gap for both sides:
+### A. Customer-Facing Pain Points (Customer POV)
+1. **Information Hesitation & Short Hardcoded Descriptions:**  
+   Customer queries regarding food items, weight descriptions, quality, quantity, freshness, and replacement terms are hard to verify from static frontend descriptions, and bakeries find it impossible to hardcode exhaustive descriptions for every single catalog SKU.
+2. **Sweetness & Flavor Guesswork:**  
+   Customers frequently wonder about subjective taste profiles — *"Is this overly sweet, balanced, or dark bitter-sweet?"* — but feel awkward calling store staff repeatedly for minor questions.
+3. **The "Baking Knowledge" Gap:**  
+   Shoppers do not know the difference between standard eggless vs. authentic **Khoaa Eggless** bases, custom sizing (0.5kg vs 1kg portions), or fresh baking wait times.
+4. **Support Drop-off Post-9 PM:**  
+   Traditional bakery phone lines close early, leaving late-night celebration planners and midnight craving inquiries completely unassisted.
 
-#### For the Customer:
-- **Instant 24/7 Access:** Available around the clock for late-night queries, live order tracking, and cake discovery.
-- **Personalized Guidance:** Suggests up to 3 best-fit cakes based on semantic flavor preference and celebration type.
-- **Zero Hallucination Tracking:** Direct transactional queries to IBM Db2 relational tables provide exact order status reports.
-- **Bilingual Interaction:** Native support for bilingual Hindi and English phrasing to match local customer demographics.
+### B. Business & Operational Bottlenecks (Business POV)
+1. **Lost Late-Night Conversions:**  
+   When human staff goes offline after 9 PM, high-intent customers abandon their orders due to unanswered questions.
+2. **Support Fatigue:**  
+   Kitchen and sales staff spend hours repeatedly answering the same basic questions (*"Is this eggless?"*, *"Kitna meetha hai?"*, *"Reheat kaise karein?"*) instead of focusing on fresh baking and fulfillment.
+3. **Customization Communication Barriers:**  
+   Hard to describe individual cake design customizations, seasonal flavor pairings, and live base-type availability via static menus.
 
-#### For the Management:
-- **Autonomous Lead Capture:** Acts as a 24/7 sales assistant, capturing inquiries even when store staff is offline.
-- **Unified Hybrid Storage:** Seamlessly queries across structured relational tables (order records, line items) and domain knowledge vectors within IBM Db2.
-- **Safe Session Execution:** Transactional operations utilize DB-API 2.0 cursor context managers with automatic rollback on error.
+---
+
+## 2. How CHOCO AI Solves Both Perspectives
+
+**CHOCO AI** bridges this entire communication gap using **IBM Db2 Hybrid RAG & Real-Time Agentic Tools**:
+
+- **Instant Food & Ingredient Intelligence:** Customers can freely ask deep questions about ingredients, food quality, quantity, sweetness levels, and sponge textures without judgment or wait times.
+- **Contextual Cake Advisory:** Proactively guides celebration planners on ideal weights, flavor pairings, and authentic bases (**Khoaa Eggless** vs. Egg-based).
+- **Zero-Hallucination Order Tracking:** Provides instant live kitchen baking updates directly from Db2 relational tables (`BB_ORDERS`), keeping customers informed without manual phone calls using agentic status tools.
+- **24/7 Query Resolution:** Provides instant customer query resolution and real-time order tracking using agentic tools, maintaining interactive session memory via **Google Gemini 1.5 Flash** (`gemini-1.5-flash`) in the user's preferred language (bilingual Hinglish/English).
+- **Culinary Care Guidelines:** Provides verified post-purchase advisory (e.g., dry tawa patty reheating, storage temperatures, shelf life & chilling cake in a cool place before cutting).
+- **Target Audience:** Local bakery customers, celebration planners, dietary-conscious buyers, kitchen staff, and store managers.
 
 ---
 
@@ -140,9 +150,57 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
 
 ## Agentic Tools (Hybrid RRF Ranked Cards & Protected Order Tracking)
 
-- **Agentic Tool 1 (`recommend_cakes`):** Renders **up to 3** (not a hardcoded fixed 3) structured cake cards ranked by 3-Channel Reciprocal Rank Fusion (RRF: $k=60$) exceeding the `min_rrf_score = 0.015` threshold.
-- **Agentic Tool 2 (`track_live_order`):** Executes real-time backend SQL queries against IBM Db2 relational tables (`BB_ORDERS` JOIN `BB_ORDER_ITEMS`) for ground-truth order tracking, featuring automated privacy data masking for customer details.
-- **Agentic Tool 3 (`get_store_policy_or_advisory`):** Hybrid RRF retrieval for store working agreements (standard 3-4 hours baking wait time) and snack heating guidelines (dry tawa only, never microwave).
+All 3 core agentic tools are defined in `src/query_engine.py` and bound directly to **Google Gemini 1.5 Flash** via `_bind_gemini_tools()`:
+
+### 1. `recommend_cakes(user_query: str, limit: int = 3)`
+* **Purpose:** Precision cake product recommendation.
+* **How it works:**
+  * Queries IBM Db2 native vector store (`BB_CHUNKS_VECTOR`) using Cosine Similarity via `DB2LlamaVS`.
+  * Concurrently queries BM25 (exact flavor keywords) and TF-IDF (weights, bases).
+  * Fuses rankings with **3-Way Reciprocal Rank Fusion ($k=60$)**.
+  * Enforces a quality threshold (`min_rrf_score >= 0.015`).
+  * Returns **up to 3** clean JSON cards containing SKU, name, flavor, weight, price, and image URL.
+
+### 2. `track_live_order(order_id: int, phone_number: str)`
+* **Purpose:** Real-time backend transactional order lookup without human customer support latency.
+* **How it works:**
+  * Connects to IBM Db2 relational tables using `ibm_db_dbi`.
+  * Executes a live SQL query joining `BB_ORDERS` and `BB_ORDER_ITEMS`.
+  * **Two-Factor Authentication Barrier:** Requires both `order_id` and the customer's registered 10-digit mobile number to prevent unauthorized order snooping.
+  * **Automated PII Masking:** Masks names (`R**** S*****`), phone numbers (`+91 ******3210`), and delivery addresses directly at the database retrieval boundary.
+  * Provides ground-truth baking & delivery stages (`CONFIRMED` → `BAKING` → `OUT_FOR_DELIVERY` → `DELIVERED`).
+
+### 3. `get_store_policy_or_advisory(user_query: str)`
+* **Purpose:** Store agreements, baking timelines, and kitchen advice.
+* **How it works:**
+  * Performs hybrid retrieval strictly filtered for policy and advisory chunks.
+  * Answers specific bakery rules:
+    * Standard fresh-baking wait time: **3–4 hours** (ensuring all cakes are baked live on order).
+    * Authentic **Khoaa Eggless (100% Pure Veg)** vs. Egg base options.
+    * Snack reheating guidelines (**dry tawa / skillet only**, never microwave).
+
+### How Gemini Directly Interacts with the Tools (Code Implementation)
+
+In `src/query_engine.py`, Gemini is configured with native Python function calling:
+
+```python
+# 1. Bind Python functions as callable tools for Gemini
+tools = self._bind_gemini_tools()
+
+# 2. Supply tools and Master Baker system instruction
+self.model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    tools=tools,
+    system_instruction=system_instruction
+)
+
+# 3. Automatic function execution during chat
+chat = self.model.start_chat(enable_automatic_function_calling=True)
+response = chat.send_message(prompt_with_history)
+```
+
+- **Automatic Function Execution:** With `enable_automatic_function_calling=True`, the Gemini SDK itself detects when a customer query requires database information, calls the Python tool, receives the database result, and synthesizes a polite, bilingual Hinglish response.
+- **Deterministic Offline Fallback:** If the API key is not present or network is unavailable (`--no-llm`), the system includes a zero-hallucination deterministic dispatcher that executes the exact same tools directly, guaranteeing the application always functions reliably.
 
 ---
 
@@ -150,6 +208,7 @@ When users interact with CHOCO AI, the platform bridges the gap for both sides:
 
 - **Session Isolation:** Each customer runs in an isolated session context (`session_id`), preventing cross-user data leakage.
 - **Conversation Buffer Memory:** Uses a sliding-window `SessionBufferMemory` to retain recent conversation context across multi-turn interactions.
+- **TTL Eviction:** Sessions inactive for more than 1 hour (3600s) are automatically evicted to ensure bounded memory usage.
 
 ---
 
@@ -159,7 +218,7 @@ All high-resolution production screenshots are cataloged in [`docs/screenshots/`
 
 | Feature / Proof | Screenshot Preview | Description |
 |---|---|---|
-| **IBM Db2 Database & Vectors** | ![IBM Db2 VS Code Extension](docs/screenshots/01_ibm_db2_extension_tables.png) | Active VS Code Db2 extension connected to `localhost@IBMDB201` showing all `BB_*` relational tables and `BB_RAG_CHUNKS` vector embeddings. |
+| **IBM Db2 Database & Vectors** | ![IBM Db2 VS Code Extension](docs/screenshots/01_ibm_db2_extension_tables.png) | Active VS Code Db2 extension connected to `localhost@IBMDB201` showing all `BB_*` relational tables and `BB_CHUNKS_VECTOR` vector embeddings. |
 | **Catalog & Multi-Branch Storefront** | ![Storefront Overview](docs/screenshots/07_storefront_catalog_overview.png) | Production storefront catalog showing multi-branch operational indicators, pure-veg badges, and the full multi-branch cake menu demonstrated in live video. |
 | **Direct Product Querying** | ![Catalog Grid & Ask CHOCO](docs/screenshots/09_product_catalog_grid_actions.png) | 1-Click "Ask CHOCO" buttons directly embedded into product catalog cards for instant AI consultations. |
 | **Real-Time Reasoning & RAG Retrieval** | ![Contextual Reasoning](docs/screenshots/10_ask_choco_contextual_query.png) | CHOCO AI dynamically ingesting cake SKU (`BB-STR-04-05kg`) into context with live reasoning indicator. |
@@ -207,6 +266,7 @@ DB2_PORT=50000
 DB2_DATABASE=IBMDB201
 DB2_USER=your_db2_username
 DB2_PASSWORD=your_db2_password
+GEMINI_MODEL=gemini-1.5-flash
 GEMINI_API_KEY=your_gemini_api_key_here  # Optional: leave blank for deterministic mode
 ```
 
@@ -314,8 +374,8 @@ Empirical evaluation across **30 curated bakery evaluation queries** (natural fl
 
 ## Demo & Submission Links
 
-- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM)
-- **LinkedIn Post:** [https://lnkd.in/p/gtXgu6wq](https://lnkd.in/p/gtXgu6wq)
+- **Demo Video (YouTube Walkthrough):** [https://youtu.be/NLrRq6FX358?si=hjcFKSU-FCOhvToW](https://youtu.be/NLrRq6FX358?si=hjcFKSU-FCOhvToW)
+- **LinkedIn Post:** [https://lnkd.in/p/gZXgB8B4](https://lnkd.in/p/gZXgB8B4)
 - **Hackathon PR Submission Repository:** [https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission](https://github.com/AYUSHDHANGAR/IBM_Db2_TechX_Project_Submission)
 - **Full-Stack Application Repository (React 18 Storefront + FastAPI Backend):** [https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY](https://github.com/AYUSHDHANGAR/BAKE_BOX--AI-ASSISTENT-FOR-BAKERY)
 - **Standalone Seed Datasets:** High-quality JSON records provided in [`data/sample_catalog.json`](data/sample_catalog.json) and [`data/sample_orders.json`](data/sample_orders.json).
@@ -339,7 +399,7 @@ Empirical evaluation across **30 curated bakery evaluation queries** (natural fl
 
 | Name | GitHub Handle | Role / Contribution |
 |---|---|---|
-| Ayush Dhangar | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML, 4th Year · AI Systems & Db2 Solutions Architect |
+| **Ayush Dhangar** | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML, 4th Year · Ex-Intern Pantech Prolab Pvt Ltd (Machine Learning) · AI Systems & Db2 Solutions Architect |
 
 ---
 

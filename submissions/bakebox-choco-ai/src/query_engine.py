@@ -1,7 +1,7 @@
 """
 Main Query Engine and Agentic Dispatcher for BAKEBOX Choco AI.
 Demonstrates:
-1. Agentic Tool 1: recommend_cakes (Renders UP TO 3 JSON cake cards recommended by Cosine Similarity)
+1. Agentic Tool 1: recommend_cakes (Renders UP TO 3 JSON cake cards via 3-Way RRF: Db2 Cosine + BM25 + TF-IDF)
 2. Agentic Tool 2: track_live_order (Real-time backend ACID order tracking from Db2 BB_ORDERS & BB_ORDER_ITEMS)
 3. Agentic Tool 3: get_store_policy_or_advisory (Advanced Hybrid RAG: Db2 Native Vectors + BM25 + TF-IDF)
 4. Session Isolation & Buffer Memory: Per-user conversation buffer memory isolated by session_id.
