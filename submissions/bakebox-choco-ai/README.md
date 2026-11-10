@@ -10,39 +10,6 @@
 
 ---
 
-## Judge Quickstart (Test Offline in 10 Seconds)
-
-Verify all AI retrieval pipelines, Db2 ACID row locking, BOM CTE logic, SHA-256 audit-chain integrity, and API security guardrails **offline** without requiring live Db2 credentials or API keys:
-
-```bash
-cd submissions/bakebox-choco-ai
-pip install -r requirements.txt
-
-# 1. Run full unit, concurrency, audit-chain, and API security suite (64 tests)
-python -m unittest discover -s tests -v
-
-# 2. Run 30-query empirical retrieval benchmark
-python tests/evaluate_retrieval.py
-
-# 3. Launch the production FastAPI REST server
-uvicorn src.api:app --reload
-# Swagger / OpenAPI docs: http://127.0.0.1:8000/docs
-```
-
----
-
-## Official Evaluation Rubric Evidence
-
-| Dimension | Weight | Implemented Evidence in Submission | Source |
-|---|---:|---|---|
-| **IBM Db2 Integration & Depth** | 25% | `ibm_db` / `ibm_db_dbi`, `DB2LlamaVS` (`vector(384, FLOAT32)` COSINE), FK cascade, 5 B-tree indexes, view `V_ACTIVE_BAKERY_ORDERS`, `WITH RECIPE_BOM` CTE, `FOR UPDATE WITH RS`, `SP_RESERVE_CAKE_STOCK` via `callproc()`, `LOCK TABLE BB_AUDIT_LOG`, least-privilege SQL roles. | [`src/db.py`](src/db.py), [`src/ingest.py`](src/ingest.py), [`src/order_engine.py`](src/order_engine.py), [`src/vector_store.py`](src/vector_store.py), [`sql/db2_least_privilege.sql`](sql/db2_least_privilege.sql) |
-| **Innovation & Real-World Impact** | 20% | Digital extension of *Shri Ram Baker's* (Mathura, 20+ years, Holigate & Gosna branches); 24/7 bilingual Hinglish advisory, up-to-3 dynamic cards, live order tracking, and Happiness Guarantee resolution. | [`src/query_engine.py`](src/query_engine.py), [`data/sample_catalog.json`](data/sample_catalog.json) |
-| **Technical Architecture & AI** | 15% | Modular pipeline (`db`, `vector_store`, `retriever`, `query_engine`, `order_engine`, `api`), 3-way RRF (`k=60`), Gemini function calling + deterministic offline fallback, `ContextVar` tool-call isolation, TTL `SessionBufferMemory`, Mermaid + DDL specs. | [`architecture.md`](architecture.md), [`src/retriever.py`](src/retriever.py), [`src/query_engine.py`](src/query_engine.py) |
-| **Security** | 15% | `.env` gitignored + `.env.example` placeholders, `?` parameterized SQL, `RIGHT(...)` phone check (zero `LIKE` wildcard injection), 2FA on `/orders/{id}` and `/orders/{id}/refund`, PII boundary masking, shared prompt-injection guardrails + XML prompt delimiters, least-privilege Db2 roles (`DB2_READONLY_USER`). | [`src/query_engine.py`](src/query_engine.py), [`src/api.py`](src/api.py), [`sql/db2_least_privilege.sql`](sql/db2_least_privilege.sql) |
-| **Reproducibility & Code Quality** | 15% | Zero-Docker PEP 249 `MockDb2Connection`, pinned `requirements.txt` (including `fastapi`/`uvicorn`/`pydantic`), 64 unit/concurrency/security tests, and 30-query benchmark. | [`requirements.txt`](requirements.txt), [`tests/`](tests/) |
-| **Documentation & Presentation** | 10% | Complete `submission.json`, `architecture.md`, 11 production screenshots, YouTube walkthrough, MIT license, strict scope isolation, single squashed Conventional Commit. | [`submission.json`](submission.json), [`docs/screenshots/README.md`](docs/screenshots/README.md) |
-
----
 
 ## Table of Contents
 - [1. Project Overview](#1-project-overview)
