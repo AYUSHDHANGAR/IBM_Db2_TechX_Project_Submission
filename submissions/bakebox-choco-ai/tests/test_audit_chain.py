@@ -8,6 +8,7 @@ import os
 import sys
 import json
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _pkg_root not in sys.path:
@@ -107,6 +108,20 @@ class TestAuditChain(unittest.TestCase):
         self.conn.tables["BB_AUDIT_LOG"] = []
         is_valid, bad_id, msg = verify_audit_chain(self.conn)
         self.assertTrue(is_valid)
+
+    def test_09_concurrent_audit_chain_integrity(self):
+        """Concurrent threads appending audit blocks must never fork or break the SHA-256 chain."""
+        def worker(idx: int):
+            return append_audit_log(self.conn, f"sess_{idx}", "CONCURRENT_OP", {"seq": idx})
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(worker, i) for i in range(16)]
+            for f in futures:
+                f.result()
+
+        self.assertEqual(len(self.conn.tables["BB_AUDIT_LOG"]), 16)
+        is_valid, bad_id, msg = verify_audit_chain(self.conn)
+        self.assertTrue(is_valid, f"Concurrent audit chain broken at {bad_id}: {msg}")
 
 
 if __name__ == "__main__":

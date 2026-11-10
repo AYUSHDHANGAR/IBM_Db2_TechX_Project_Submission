@@ -127,10 +127,21 @@ class TestOrderConcurrencyAndBOM(unittest.TestCase):
         self.assertEqual(res2["status"], "ALREADY_REFUNDED")
 
     def test_11_stored_procedure_reservation_caller(self):
-        """Verify IBM Db2 Stored Procedure caller SP_RESERVE_CAKE_STOCK executes cleanly."""
+        """Verify IBM Db2 Stored Procedure caller SP_RESERVE_CAKE_STOCK executes via callproc."""
         from src.order_engine import call_sp_reserve_cake_stock
         success = call_sp_reserve_cake_stock(self.conn, cake_id=1, quantity=1)
         self.assertTrue(success)
+        self.assertEqual(self.conn.tables["BB_CAKES"][1]["STOCK_QTY"], 4)
+        self.assertFalse(call_sp_reserve_cake_stock(self.conn, cake_id=1, quantity=0))
+        self.assertFalse(call_sp_reserve_cake_stock(self.conn, cake_id=2, quantity=5))
+
+    def test_12_ingest_seeding_idempotency_mock(self):
+        """Verify init_relational_tables seeds BB_CAKES, BB_INVENTORY, BB_RECIPES idempotently."""
+        from src.ingest import init_relational_tables
+        init_relational_tables(self.conn)
+        self.assertIn(1, self.conn.tables["BB_CAKES"])
+        self.assertIn(101, self.conn.tables["BB_INVENTORY"])
+        self.assertIn(1, self.conn.tables["BB_RECIPES"])
 
 
 if __name__ == "__main__":

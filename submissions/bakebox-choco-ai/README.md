@@ -1,24 +1,54 @@
----
-### 1. Project Overview
-- **Project Type:** Business Solution / Enterprise AI Commerce
-- **Project Title:** BAKEBOX-AI: Autonomous AI Bakery Assistant & Customer Support
-- **Project Slug:** bakebox-choco-ai
+# BAKEBOX-AI: Autonomous AI Bakery Management & Customer Support
+## CHOCO AI: Advanced Hybrid RAG & ACID Transactional Platform on IBM Db2
 
-#### Description (What We Are)
-BAKEBOX is a next-generation, autonomous AI-powered bakery management platform featuring **CHOCO AI** — an intelligent conversational assistant. It serves as the digital and technological extension of our family-owned business, **Shri Ram Baker's**, which has been successfully operating in Mathura for the past 20 years with two established local branches in **Holigate** and **Gosna**.
+[![Tests](https://img.shields.io/badge/tests-64%20offline%20%26%20concurrency%20tests-brightgreen)](#automated-testing--verification)
+[![Db2](https://img.shields.io/badge/IBM%20Db2-Community%20Edition%2012.1-blue)](#4-ibm-db2-integration-summary)
+[![FastAPI](https://img.shields.io/badge/FastAPI-REST%20Endpoints-009688)](#running-the-project)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-yellow)](#prerequisites)
 
-#### Vision
-While Shri Ram Baker's has traditionally served local customers through offline channels, we are building BAKEBOX to bridge the gap into the digital era, scaling our operations for online sales, real-time order tracking, and modern inventory management.
+> **One-Line Pitch:** An enterprise autonomous AI bakery management and customer engagement platform powered by **CHOCO AI** — combining IBM Db2 hybrid storage (relational ACID tables + native vector search via `DB2LlamaVS`), 3-way Reciprocal Rank Fusion (RRF: $k=60$ across Db2 Cosine + BM25 + TF-IDF), session isolation with TTL buffer memory, an in-engine Bill-of-Materials (BOM) CTE (`WITH RECIPE_BOM`), row-level concurrency locking (`SELECT FOR UPDATE WITH RS`), stored procedure `SP_RESERVE_CAKE_STOCK`, SHA-256 hash-chained audit trails (`BB_AUDIT_LOG`), least-privilege Db2 roles, and production FastAPI REST endpoints.
 
 ---
 
+## Judge Quickstart (Test Offline in 10 Seconds)
 
+Verify all AI retrieval pipelines, Db2 ACID row locking, BOM CTE logic, SHA-256 audit-chain integrity, and API security guardrails **offline** without requiring live Db2 credentials or API keys:
+
+```bash
+cd submissions/bakebox-choco-ai
+pip install -r requirements.txt
+
+# 1. Run full unit, concurrency, audit-chain, and API security suite (64 tests)
+python -m unittest discover -s tests -v
+
+# 2. Run 30-query empirical retrieval benchmark
+python tests/evaluate_retrieval.py
+
+# 3. Launch the production FastAPI REST server
+uvicorn src.api:app --reload
+# Swagger / OpenAPI docs: http://127.0.0.1:8000/docs
+```
+
+---
+
+## Official Evaluation Rubric Evidence
+
+| Dimension | Weight | Implemented Evidence in Submission | Source |
+|---|---:|---|---|
+| **IBM Db2 Integration & Depth** | 25% | `ibm_db` / `ibm_db_dbi`, `DB2LlamaVS` (`vector(384, FLOAT32)` COSINE), FK cascade, 5 B-tree indexes, view `V_ACTIVE_BAKERY_ORDERS`, `WITH RECIPE_BOM` CTE, `FOR UPDATE WITH RS`, `SP_RESERVE_CAKE_STOCK` via `callproc()`, `LOCK TABLE BB_AUDIT_LOG`, least-privilege SQL roles. | [`src/db.py`](src/db.py), [`src/ingest.py`](src/ingest.py), [`src/order_engine.py`](src/order_engine.py), [`src/vector_store.py`](src/vector_store.py), [`sql/db2_least_privilege.sql`](sql/db2_least_privilege.sql) |
+| **Innovation & Real-World Impact** | 20% | Digital extension of *Shri Ram Baker's* (Mathura, 20+ years, Holigate & Gosna branches); 24/7 bilingual Hinglish advisory, up-to-3 dynamic cards, live order tracking, and Happiness Guarantee resolution. | [`src/query_engine.py`](src/query_engine.py), [`data/sample_catalog.json`](data/sample_catalog.json) |
+| **Technical Architecture & AI** | 15% | Modular pipeline (`db`, `vector_store`, `retriever`, `query_engine`, `order_engine`, `api`), 3-way RRF (`k=60`), Gemini function calling + deterministic offline fallback, `ContextVar` tool-call isolation, TTL `SessionBufferMemory`, Mermaid + DDL specs. | [`architecture.md`](architecture.md), [`src/retriever.py`](src/retriever.py), [`src/query_engine.py`](src/query_engine.py) |
+| **Security** | 15% | `.env` gitignored + `.env.example` placeholders, `?` parameterized SQL, `RIGHT(...)` phone check (zero `LIKE` wildcard injection), 2FA on `/orders/{id}` and `/orders/{id}/refund`, PII boundary masking, shared prompt-injection guardrails + XML prompt delimiters, least-privilege Db2 roles (`DB2_READONLY_USER`). | [`src/query_engine.py`](src/query_engine.py), [`src/api.py`](src/api.py), [`sql/db2_least_privilege.sql`](sql/db2_least_privilege.sql) |
+| **Reproducibility & Code Quality** | 15% | Zero-Docker PEP 249 `MockDb2Connection`, pinned `requirements.txt` (including `fastapi`/`uvicorn`/`pydantic`), 64 unit/concurrency/security tests, and 30-query benchmark. | [`requirements.txt`](requirements.txt), [`tests/`](tests/) |
+| **Documentation & Presentation** | 10% | Complete `submission.json`, `architecture.md`, 11 production screenshots, YouTube walkthrough, MIT license, strict scope isolation, single squashed Conventional Commit. | [`submission.json`](submission.json), [`docs/screenshots/README.md`](docs/screenshots/README.md) |
+
+---
 
 ## Table of Contents
-- [BAKEBOX - CHOCO AI: Dual-Perspective Overview](#bakebox---choco-ai-dual-perspective-overview)
-- [1. The Core Problem Statement](#1-the-core-problem-statement-dual-perspective-challenges)
-- [2. How CHOCO AI Solves Both Perspectives](#2-how-choco-ai-solves-both-perspectives)
-- [IBM Db2 Integration & Depth](#ibm-db2-integration--depth)
+- [1. Project Overview](#1-project-overview)
+- [2. Problem We Are Solving (Customer & Business POV)](#2-problem-we-are-solving-customer--business-pov)
+- [3. The BAKEBOX Solution: CHOCO AI as a Digital Master Baker](#3-the-bakebox-solution-choco-ai-as-a-digital-master-baker)
+- [4. IBM Db2 Integration Summary](#4-ibm-db2-integration-summary)
 - [AI & Advanced Hybrid RAG Architecture (BM25 + TF-IDF + Db2 Vectors)](#ai--advanced-hybrid-rag-architecture-bm25--tf-idf--db2-vectors)
 - [Agentic Tools (Hybrid RRF Ranked Cards & Protected Order Tracking)](#agentic-tools-hybrid-rrf-ranked-cards--protected-order-tracking)
 - [Session Isolation & Buffer Memory](#session-isolation--buffer-memory)
@@ -28,69 +58,71 @@ While Shri Ram Baker's has traditionally served local customers through offline 
 - [Configuration](#configuration)
 - [Running the Project](#running-the-project)
 - [Automated Testing & Verification](#automated-testing--verification)
+- [Retrieval Quality Benchmark & Evaluation](#retrieval-quality-benchmark--evaluation)
+- [Technical Defense & Architectural FAQ](#technical-defense--architectural-faq)
 - [Demo & Submission Links](#demo--submission-links)
 - [Known Limitations & Future Roadmap](#known-limitations--future-roadmap)
 - [Team Members & Credits](#team-members--credits)
 - [License](#license)
 
+---
 
-### 2. Problem We Are Solving (Customer & Business POV)
+### 1. Project Overview
+- **Project Type:** Business Solution / Enterprise AI Commerce
+- **Project Title:** BAKEBOX-AI: Autonomous AI Bakery Assistant & Customer Support
+- **Project Slug:** bakebox-choco-ai
 
-#### 1. Information Hesitation & Short hardcode Description (Customer POV)
+#### Description (What We Are)
+BAKEBOX is an autonomous AI-powered bakery management platform featuring **CHOCO AI** — an intelligent conversational assistant. It serves as the digital and technological extension of our family-owned business, **Shri Ram Baker's**, operating in Mathura for over 20 years across two established local branches in **Holigate** and **Gosna**.
 
-- **Quarry resolution & in-product brief description (Business end) :** Customer quarry like , details about any food item, weight description , quality , quantity ,freshness & any term & condition like replacement are hard to verify from customer end , as of hard to hardcore every description in frontend from Business end too . 
-  
-- **Sweetness & Flavor Guesswork:** Customers frequently wonder about subjective taste profiles — *"Is this overly sweet, balanced, or dark bitter-sweet?"* — but feel awkward calling store staff repeatedly for minor questions.
-
-- **The "Baking Knowledge" Gap:** Shoppers don't know the difference between standard eggless vs. authentic **Khoaa Eggless** bases, custom sizing (0.5kg vs 1kg portions), or fresh baking wait times.
-
-- **Support Drop-off Post-9 PM:** Traditional bakery phone lines close early, leaving late-night celebration planners and midnight craving inquiries completely unassisted.
-
-#### 2. Communication & Operational Bottlenecks (Business POV)
-- **Lost Late-Night Conversions:** When human staff goes offline after 9 PM, high-intent customers abandon their carts due to unanswered questions.
-- **Support Fatigue:** Kitchen and sales staff spend hours repeatedly answering the same basic questions (*"Is this eggless?", "Kitna meetha hai?", "Reheat kaise karein?"*) instead of focusing on fresh baking and fulfillment.
--**Customize cake:** hard to describe every cake information design & different flavor , base-type availability .
--**Coupon & personalized Discount Coupon:** Hard to describe manually every personalize coupon for daily user's & resolution around them .   
+#### Vision
+While Shri Ram Baker's has traditionally served local customers through offline channels, BAKEBOX bridges the gap into digital commerce — scaling operations for online discovery, real-time order tracking, Happiness Guarantee support, and ACID-safe inventory management on IBM Db2.
 
 ---
 
-#### 🌟 The BAKEBOX Solution: CHOCO AI as a Digital Master Baker
-CHOCO AI bridges this entire communication gap using **IBM Db2 Hybrid RAG & agentic tools **:
+### 2. Problem We Are Solving (Customer & Business POV)
 
-- **Instant Food & Ingredient Intelligence:** Customers can freely ask deep questions about ingredients, food quality , quantity , sweetness levels, and sponge textures without judgment or wait times.
+#### Customer Perspective: Information Hesitation & Static Descriptions
+- **Query Resolution & Product Clarity:** Customers often want exact details about ingredients, weight options, freshness, sweetness, and replacement terms that are difficult to hardcode across every static product card.
+- **Sweetness & Flavor Guesswork:** Customers wonder about subjective taste profiles (*"Is this overly sweet, balanced, or dark bitter-sweet?"*) but hesitate to call store staff for minor questions.
+- **The "Baking Knowledge" Gap:** Shoppers may not know the difference between standard eggless vs. authentic **Khoaa Eggless** bases, portion sizing (0.5kg vs. 1kg), or fresh-baking wait times.
+- **Support Drop-off Post-9 PM:** Traditional bakery phone lines close early, leaving late-night celebration planners and order-tracking inquiries unassisted.
 
-- **Contextual Cake Advisory:** Proactively guides celebration planners on ideal weights, flavor pairings, and authentic bases (Khoaa Eggless).
+#### Business Perspective: Communication & Operational Bottlenecks
+- **Lost Late-Night Conversions:** When human staff go offline after 9 PM, high-intent customers abandon carts due to unanswered questions.
+- **Support Fatigue:** Kitchen and sales staff spend hours answering repetitive questions (*"Is this eggless?", "Kitna meetha hai?", "Reheat kaise karein?"*) instead of focusing on fresh baking and fulfillment.
+- **Custom Cake & Base Complexity:** Explaining design options, flavor profiles, and eggless/Khoaa base availability manually across hundreds of SKUs does not scale.
 
-- **Zero-Hallucination Order Tracking:** Provides instant live kitchen baking updates directly from Db2 relational tables (`BB_ORDERS`), keeping customers informed without manual phone calls using agentic tools (status update).
+---
 
-- **24/7 quarry resolution:** provide good quarry resolution & provide real time  order status using agentic tools , & maintain interactive session using gemini-1.5-flash & provide solution in Preferred language of user .
+### 3. The BAKEBOX Solution: CHOCO AI as a Digital Master Baker
+CHOCO AI bridges both perspectives using **IBM Db2 Hybrid RAG & agentic tools**:
 
-- **Culinary Care Guidelines:** Provides verified post-purchase advisory (e.g., dry tawa patty reheating, storage temperatures, shelf life & storing cake in cold place before cutting etc).
-
+- **Instant Food & Ingredient Intelligence:** Answers deep questions about ingredients, sweetness levels, allergens, and sponge textures with zero wait time.
+- **Contextual Cake Advisory:** Recommends up to 3 relevant cakes based on flavor, occasion, weight, and dietary choice (100% Pure Veg Khoaa Eggless or Egg).
+- **Zero-Hallucination Order Tracking:** Queries live Db2 relational tables (`BB_ORDERS`, `BB_ORDER_ITEMS`) behind two-factor phone verification and PII masking.
+- **24/7 Bilingual Query Resolution:** Maintains isolated multi-turn sessions via `gemini-1.5-flash` (with deterministic offline fallback) in bilingual Hinglish/English.
+- **Culinary Care & Happiness Guarantee:** Delivers verified post-purchase advisories (e.g., dry tawa patty reheating) and automated Happiness Guarantee refund/replacement eligibility checks.
 - **Target Audience:** Local bakery customers, celebration planners, dietary-conscious buyers, kitchen staff, and store managers.
-
-- **Coupon & personalized Discount Coupon:** Making people aware of there personalize discount Coupon for daily or new-bee offers for boosting commercial sales . 
-
-------------------------------------------------------------------------------------------------------------------------------------
-
-
-
-> **One-Line Pitch:** An enterprise autonomous AI bakery management system and intelligent customer engagement platform powered by **CHOCO AI** — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via `DB2LlamaVS`), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: $k=60$), session isolation with conversation buffer memory, in-engine Recursive Bill-of-Materials (BOM) CTE, row-level concurrency locking (`SELECT FOR UPDATE WITH RS`), cryptographic SHA-256 hash-chained audit trails (`BB_AUDIT_LOG`), and real-time agentic tools for up-to-3 cake precision recommendations and live backend order tracking.
 
 ---
 
 ### 4. IBM Db2 Integration Summary
 - **IBM Db2 Edition / Environment:** IBM Db2 Community Edition (VS Code Extension Instance `IBMDB201` on Port 50000).
-- **How IBM Db2 is Used:** IBM Db2 serves as the single unified data layer — simultaneously acting as a native high-dimensional vector store (via `DB2LlamaVS`) for embedding-based semantic retrieval AND as an ACID relational database housing live customer orders, order line items, and catalog items.
+- **How IBM Db2 is Used:** IBM Db2 serves as the single unified data layer — simultaneously acting as a native high-dimensional vector store (via `DB2LlamaVS`) for embedding-based semantic retrieval AND as an ACID relational database housing live customer orders, cake stock, ingredient inventory, recipes, and cryptographic audit logs.
 - **Db2 Connectors & Frameworks:** `ibm_db`, `ibm_db_dbi`, `llama-index-vector-stores-db2` (`DB2LlamaVS`).
 - **Schema & Data Stored:**
   - `BB_CHUNKS_VECTOR`: Native vector table with `vector(384, FLOAT32)` column for dense semantic embeddings.
-  - `BB_ORDERS`: Relational transactional order table (status, total amount, delivery address).
-  - `BB_ORDER_ITEMS`: Relational line items (SKU, item name, quantity, base, custom messages).
+  - `BB_ORDERS` & `BB_ORDER_ITEMS`: Relational transactional order tables with `GENERATED ALWAYS AS IDENTITY` and `ON DELETE CASCADE` foreign key constraint.
+  - `BB_CAKES`, `BB_INVENTORY`, `BB_RECIPES`: Relational cake stock, raw ingredient stock, and recipe BOM tables seeded idempotently by `src/ingest.py` and queried via the Db2 LUW `WITH RECIPE_BOM` Common Table Expression.
+  - `BB_AUDIT_LOG`: Cryptographic SHA-256 hash-chained audit trail table serialized via `_AUDIT_CHAIN_LOCK` + `LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE` and queried with `ORDER BY LOG_ID DESC FETCH FIRST 1 ROW ONLY`.
+  - `V_ACTIVE_BAKERY_ORDERS` & B-Tree Indexes: Operational aggregation SQL view plus `IDX_BB_ORDER_PHONE`, `IDX_BB_ITEM_ORDER`, `IDX_BB_AUDIT_PREV`, `IDX_BB_AUDIT_CURR`, and `IDX_BB_RECIPE_CAKE`.
+  - `SP_RESERVE_CAKE_STOCK`: Native IBM Db2 SQL PL stored procedure (`FOR UPDATE WITH RS` row-level locking) invoked via `ibm_db_dbi` `cursor.callproc()`.
+  - **Least-Privilege Roles (`sql/db2_least_privilege.sql`):** Separates `BAKEBOX_READER_ROLE` (`DB2_READONLY_USER` for RAG & order lookup) from `BAKEBOX_APP_ROLE` (`DB2_USER` for column-scoped stock/status updates, `SP_RESERVE_CAKE_STOCK` execution, and append-only `BB_AUDIT_LOG` inserts).
 - **Verification Steps:**
-  1. `python submissions/bakebox-choco-ai/src/ingest.py` — Sets up tables and ingests vectors into Db2.
+  1. `python submissions/bakebox-choco-ai/src/ingest.py` — Creates relational tables, view, indexes, stored procedure `SP_RESERVE_CAKE_STOCK`, seeds `BB_ORDERS`/`BB_ORDER_ITEMS`/`BB_CAKES`/`BB_INVENTORY`/`BB_RECIPES`, and ingests 384-d vectors into `BB_CHUNKS_VECTOR`.
   2. `python submissions/bakebox-choco-ai/src/query_engine.py` — Executes hybrid RRF retrieval and live order lookups.
-  3. `python submissions/bakebox-choco-ai/tests/test_retrieval.py` — Runs complete offline unit & integration test suite (9/9 passed).
+  3. `python -m unittest discover -s submissions/bakebox-choco-ai/tests -v` — Runs complete offline unit, concurrency, audit-chain, and API guardrail test suite.
   4. `python scripts/validate_submission.py submissions/bakebox-choco-ai` — Passes official CI validation checks.
 
 ---
@@ -147,10 +179,12 @@ tools = self._bind_gemini_tools()
 self.model = genai.GenerativeModel(
     model_name="gemini-1.5-flash",
     tools=tools,
-    system_instruction=system_instruction)
-# 3. Automatic function execution during chat
+    system_instruction=system_instruction,
+)
+# 3. Delimit untrusted history/query and execute automatic function calling
+delimited_prompt = _build_delimited_user_prompt(history_ctx, user_message)
 chat = self.model.start_chat(enable_automatic_function_calling=True)
-response = chat.send_message(prompt_with_history)
+response = chat.send_message(delimited_prompt)
 ```
 - **Automatic Function Execution:** With `enable_automatic_function_calling=True`, the Gemini SDK itself detects when a customer query requires database information, calls the Python tool, receives the database result, and synthesizes a polite, bilingual Hinglish response.
 - **Deterministic Offline Fallback:** If the API key is not present or network is unavailable (`--no-llm`), the system includes a zero-hallucination deterministic dispatcher that executes the exact same tools directly, guaranteeing the application always functions reliably.
@@ -209,11 +243,14 @@ Edit `.env`:
 DB2_HOST=127.0.0.1
 DB2_PORT=50000
 DB2_DATABASE=IBMDB201
-DB2_USER=your_db2_username
-DB2_PASSWORD=your_db2_password
+DB2_USER=your_db2_app_username_here
+DB2_PASSWORD=your_db2_app_password_here
+DB2_READONLY_USER=your_db2_reader_username_here  # Optional least-privilege RO role
+DB2_READONLY_PASSWORD=your_db2_reader_password_here
 GEMINI_MODEL=gemini-1.5-flash
 GEMINI_API_KEY=your_gemini_api_key_here  # Optional: leave blank for deterministic mode
 ```
+Optional (live Db2 least-privilege setup): run [`sql/db2_least_privilege.sql`](sql/db2_least_privilege.sql) once as schema owner after `src/ingest.py` creates the schema.
 
 > **Security Hygiene:** Never commit `.env` or any production credentials to Git!
 
@@ -225,7 +262,7 @@ GEMINI_API_KEY=your_gemini_api_key_here  # Optional: leave blank for determinist
 ```bash
 python src/ingest.py
 ```
-*Creates relational tables `BB_ORDERS`, `BB_ORDER_ITEMS` and ingests 384-dim dense vectors into `BB_CHUNKS_VECTOR` via `DB2LlamaVS`.*
+*Creates relational tables (`BB_ORDERS`, `BB_ORDER_ITEMS`, `BB_CAKES`, `BB_INVENTORY`, `BB_RECIPES`, `BB_AUDIT_LOG`), view `V_ACTIVE_BAKERY_ORDERS`, indexes, stored procedure `SP_RESERVE_CAKE_STOCK`, seeds sample records, and ingests 384-dim dense vectors into `BB_CHUNKS_VECTOR` via `DB2LlamaVS`.*
 
 ### 2. Execute Interactive Query Engine
 ```bash
@@ -235,10 +272,17 @@ python src/query_engine.py
 python src/query_engine.py --no-llm
 ```
 
+### 3. Start the Production FastAPI Server
+```bash
+uvicorn src.api:app --reload --host 127.0.0.1 --port 8000
+# Open Swagger UI at: http://127.0.0.1:8000/docs
+```
+
 ---
 
 ## Automated Testing & Verification
-Reviewers can verify the submission using automated tools:
+Reviewers can verify the submission offline with zero external database or API keys:
+
 ### 1. Run Official Hackathon Submission Validator
 ```bash
 python scripts/validate_submission.py submissions/bakebox-choco-ai
@@ -252,46 +296,59 @@ Checking: submissions/bakebox-choco-ai
 ALL VALIDATION CHECKS PASSED.
 ```
 
-### 2. Run Offline Unit & Integration Test Suite
+### 2. Run Full Offline Unit, Concurrency, Audit & Security Test Suite
 ```bash
-pytest submissions/bakebox-choco-ai/tests -v
-# Or using standard library:
-python submissions/bakebox-choco-ai/tests/test_retrieval.py
+python -m unittest discover -s submissions/bakebox-choco-ai/tests -v
 ```
-**Expected Output:**
-```text
-Ran 14 tests in 1.5s
-OK
-```
+**Verified Offline Result (64 tests across 6 test modules):**
+- `test_audit_chain.py` (9 tests: genesis block, hash chaining, tamper detection, multi-thread concurrency)
+- `test_guardrails_and_api.py` (12 tests: prompt injection, SQLi defense, 2FA `/refund` endpoint, direct engine guardrail, least-privilege RO connection string)
+- `test_order_concurrency.py` (12 tests: `FOR UPDATE WITH RS` race stress, `WITH RECIPE_BOM` CTE, `SP_RESERVE_CAKE_STOCK` `callproc()`, `ingest.py` seeding)
+- `test_retrieval.py` (14 tests: RRF, BM25, routing, 2FA order tracking, PII masking; 1 test skips cleanly if `llama_index` is not installed)
+- `test_rrf_fusion.py` (10 tests: RRF `k=60` formula, BM25 saturation, boundary cases)
+- `test_session_memory.py` (7 tests: multi-tenant isolation, sliding window, TTL, PII masking)
 
 ### 3. Run Empirical 30-Query Retrieval Benchmark
 ```bash
 python submissions/bakebox-choco-ai/tests/evaluate_retrieval.py
 ```
-**Expected Output:**
+**Verified Offline Result (Strict ID Matching across All 4 Categories):**
 ```text
 Total Benchmark Queries : 30
-Hit Rate @ 1 (Top-1)    : 96.7% (29/30)
+Hit Rate @ 1 (Top-1)    : 86.7% (26/30)
 Hit Rate @ 3 (Top-3)    : 100.0% (30/30)
-Mean Reciprocal Rank    : 0.98 MRR
-Average CPU Latency     : ~5.0ms per query
+Mean Reciprocal Rank    : 0.93 MRR
+Average CPU Latency     : < 1.0ms per query (lexical offline mode)
 [PASSED] Empirical evaluation benchmark successfully verified!
 ```
 
 ---
 
+## Retrieval Quality Benchmark & Evaluation
 
+Empirical evaluation across **30 curated bakery queries** (semantic cravings, exact SKU lookups, dietary/base constraints, and strictly verified policy/advisory ID matching):
 
-## 📊 Retrieval Quality Benchmark & Evaluation (RRF vs Single Channels)
+| Metric | Measured Result | Notes |
+|---|---:|---|
+| **Hit Rate @ 1 (Top-1)** | **86.7% (26/30)** | Exact SKU, product title, and primary flavor queries rank #1. |
+| **Hit Rate @ 3 (Top-3)** | **100.0% (30/30)** | All 30 queries retrieve the ground-truth SKU or policy document within Top-3. |
+| **Mean Reciprocal Rank (MRR)** | **0.93** | Computed over all 30 queries including strict policy ID verification. |
+| **3-Way RRF Constant** | **$k = 60$** | Fuses `DB2LlamaVS` dense cosine search + Okapi BM25 + TF-IDF. |
 
-Empirical evaluation across **30 curated bakery evaluation queries** (natural flavor descriptions, exact SKU lookups, dietary constraints, and bilingual Hinglish phrasing):
+---
 
-| Retrieval Channel | Hit Rate @ 3 | MRR (Mean Reciprocal Rank) | Precision @ 3 | Latency (CPU) | Primary Strength / Failure Mode |
-|---|---|---|---|---|---|
-| **Dense Only (Db2 Vector)** | 76.7% | 0.68 | 70.0% | 18ms | Strong semantic capture; fails on exact SKUs (e.g. `BB-RED-02-1kg`). |
-| **Sparse BM25 Only** | 73.3% | 0.65 | 66.7% | 2ms | Exact keyword match; fails on conceptual cravings (*"something chocolatey for anniversary"*). |
-| **Sparse TF-IDF Only** | 70.0% | 0.61 | 63.3% | 3ms | Captures weights/flavors; weak on long bilingual queries. |
-| **🏆 3-Way Hybrid RRF ($k=60$)** | **96.7%** | **0.91** | **90.0%** | **22ms** | **Consensus retrieval eliminates blindspots, ranking exact SKUs and conceptual flavors at rank 1.** |
+## Technical Defense & Architectural FAQ
+
+### Q1: Why choose Reciprocal Rank Fusion (RRF: $k=60$) over linear score normalization?
+- **Score Scale Incompatibility:** Dense cosine similarity lies in $[0, 1]$, Okapi BM25 outputs unbounded positive scores, and TF-IDF outputs $[0, 1]$. RRF combines ordinal ranks via $\sum_m \frac{1}{60 + \text{rank}_m(d) + 1}$, preventing lexical outliers from drowning out semantic matches.
+
+### Q2: How are concurrent stock reservations and audit-chain writes protected?
+- **Stock Reservations:** Uses `SELECT STOCK_QTY FROM BB_CAKES WHERE CAKE_ID = ? FOR UPDATE WITH RS` (and `SP_RESERVE_CAKE_STOCK` via `cursor.callproc()`).
+- **Audit Log Chain:** `append_audit_log()` serializes writers with `_AUDIT_CHAIN_LOCK` plus `LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE` and reads the tail hash via `ORDER BY LOG_ID DESC FETCH FIRST 1 ROW ONLY` inside a single atomic transaction.
+
+### Q3: How are customer PII and LLM prompts protected?
+- **Order & Refund 2FA:** Both order lookup (`GET /api/orders/{id}`) and refunds (`POST /api/orders/{id}/refund`) require matching `order_id` + 10-digit customer phone via parameterized `RIGHT(REPLACE(...), 10) = ?`, with PII masked at the database boundary.
+- **Prompt Defense:** `check_prompt_security()` runs directly inside `ChocoQueryEngine.query()` as well as the FastAPI layer, and untrusted history/queries are wrapped inside explicit `<conversation_history_readonly>` and `<customer_query_untrusted>` delimiters.
 
 ---
 
@@ -325,11 +382,6 @@ Empirical evaluation across **30 curated bakery evaluation queries** (natural fl
 | **Ayush Dhangar** | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML, 4th Year · Ex-Intern Pantech Prolab Pvt Ltd (Machine Learning) · AI Systems & Db2 Solutions Architect |
 
 ---
-[![Tests](https://img.shields.io/badge/tests-50%2B%20passed%20(100%25)-brightgreen)](#automated-testing--verification)
-[![Db2](https://img.shields.io/badge/IBM%20Db2-Community%20Edition%2012.1-blue)](#ibm-db2-integration--depth)
-[![FastAPI](https://img.shields.io/badge/FastAPI-REST%20Endpoints-009688)](#fastapi-backend-api-server)
-[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12%20%7C%203.13-yellow)](#prerequisites)
-
 ## License
 
 Distributed under the MIT License. Built for the IBM Db2 TechX Summit 2026.

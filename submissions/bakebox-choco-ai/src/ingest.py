@@ -235,20 +235,30 @@ def init_relational_tables(conn):
     LANGUAGE SQL
     BEGIN
         DECLARE v_current_stock INT DEFAULT 0;
-        SELECT stock_qty INTO v_current_stock
-        FROM BB_CAKES
-        WHERE cake_id = p_cake_id
-        FOR UPDATE WITH RS;
-        
-        IF v_current_stock >= p_qty THEN
-            UPDATE BB_CAKES
-            SET stock_qty = stock_qty - p_qty
-            WHERE cake_id = p_cake_id;
-            SET p_success = 1;
-            COMMIT;
-        ELSE
+        DECLARE EXIT HANDLER FOR NOT FOUND
+        BEGIN
             SET p_success = 0;
             ROLLBACK;
+        END;
+
+        IF p_qty <= 0 THEN
+            SET p_success = 0;
+        ELSE
+            SELECT stock_qty INTO v_current_stock
+            FROM BB_CAKES
+            WHERE cake_id = p_cake_id
+            FOR UPDATE WITH RS;
+
+            IF v_current_stock >= p_qty THEN
+                UPDATE BB_CAKES
+                SET stock_qty = stock_qty - p_qty
+                WHERE cake_id = p_cake_id AND stock_qty >= p_qty;
+                SET p_success = 1;
+                COMMIT;
+            ELSE
+                SET p_success = 0;
+                ROLLBACK;
+            END IF;
         END IF;
     END
     """
@@ -258,6 +268,66 @@ def init_relational_tables(conn):
     except Exception as e:
         if not _is_already_exists_error(e):
             print(f"  [INFO] Stored procedure registration: {e}")
+
+    # Seed BB_CAKES, BB_INVENTORY, and BB_RECIPES idempotently for live Db2 BOM & row-locking
+    seed_cakes = [
+        (1, "Red Velvet Crimson Crumb Crown", "BB-RED-01-1kg", 649.00, 5, 1),
+        (2, "Black Forest Classic Gateau", "BB-BLK-01-05kg", 249.00, 1, 1),
+        (3, "Pineapple Spiral Mirror", "BB-PIN-01-05kg", 249.00, 0, 1),
+    ]
+    for cake_id, name, sku_id, price, stock_qty, is_eggless in seed_cakes:
+        try:
+            chk = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_CAKES WHERE cake_id = ?", (cake_id,))
+            if not chk or chk[0]["CNT"] == 0:
+                execute_dml(
+                    conn,
+                    "INSERT INTO BB_CAKES (cake_id, name, sku_id, price, stock_qty, is_eggless_available) VALUES (?, ?, ?, ?, ?, ?)",
+                    (cake_id, name, sku_id, price, stock_qty, is_eggless)
+                )
+        except Exception as e:
+            print(f"  [WARNING] Seeding BB_CAKES #{cake_id}: {e}")
+
+    seed_inventory = [
+        (101, "Khoaa Base (Eggless)", 12.0, "kg"),
+        (102, "Belgian Dark Cocoa", 8.5, "kg"),
+        (103, "Cream Cheese Frosting", 4.0, "kg"),
+        (104, "Maraschino Cherries", 0.2, "kg"),
+    ]
+    for ing_id, ing_name, qty, unit in seed_inventory:
+        try:
+            chk = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_INVENTORY WHERE ingredient_id = ?", (ing_id,))
+            if not chk or chk[0]["CNT"] == 0:
+                execute_dml(
+                    conn,
+                    "INSERT INTO BB_INVENTORY (ingredient_id, ingredient_name, stock_qty, unit) VALUES (?, ?, ?, ?)",
+                    (ing_id, ing_name, qty, unit)
+                )
+        except Exception as e:
+            print(f"  [WARNING] Seeding BB_INVENTORY #{ing_id}: {e}")
+
+    seed_recipes_by_cake = {
+        1: [
+            (101, "Khoaa Base (Eggless)", 0.5),
+            (103, "Cream Cheese Frosting", 0.4),
+        ],
+        2: [
+            (101, "Khoaa Base (Eggless)", 0.3),
+            (102, "Belgian Dark Cocoa", 0.2),
+            (104, "Maraschino Cherries", 0.5),
+        ],
+    }
+    try:
+        for cake_id, ingredients in seed_recipes_by_cake.items():
+            chk = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_RECIPES WHERE cake_id = ?", (cake_id,))
+            if not chk or chk[0]["CNT"] == 0:
+                for ing_id, ing_name, qty_needed in ingredients:
+                    execute_dml(
+                        conn,
+                        "INSERT INTO BB_RECIPES (cake_id, ingredient_id, ingredient_name, qty_needed) VALUES (?, ?, ?, ?)",
+                        (cake_id, ing_id, ing_name, qty_needed)
+                    )
+    except Exception as e:
+        print(f"  [WARNING] Seeding BB_RECIPES: {e}")
 
     # Seed sample orders dynamically from data/sample_orders.json
     orders_file = os.path.join(_pkg_root, "data", "sample_orders.json")

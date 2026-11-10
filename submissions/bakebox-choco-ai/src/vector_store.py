@@ -38,12 +38,13 @@ class BakeboxDb2VectorStore:
         self,
         table_name: str = "BB_CHUNKS_VECTOR",
         embed_dim: int = 384,
-        distance_strategy: DistanceStrategy = DistanceStrategy.COSINE
+        distance_strategy: DistanceStrategy = DistanceStrategy.COSINE,
+        readonly: bool = False
     ):
         self.table_name = table_name
         self.embed_dim = embed_dim
         self.distance_strategy = distance_strategy
-        self.connection = get_dbi_connection()
+        self.connection = get_dbi_connection(readonly=readonly)
 
         strat_name = getattr(distance_strategy, "name", str(distance_strategy))
         logger.info(

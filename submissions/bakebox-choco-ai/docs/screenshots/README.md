@@ -70,7 +70,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 - **User Query:** *"Order #1104 what was the order status of this order id ."*
 - **Database Query Execution:** CHOCO AI queries `BB_ORDERS` and `BB_ORDER_ITEMS` in real time and reports:
   - **Order ID:** #1104
-  - **Customer Name:** Ayush ji (Phone: 8279783653)
+  - **Customer Name:** A**** ji (Phone: +91 ******3653 — masked at DB boundary)
   - **Status:** `CONFIRMED`
   - **Items Ordered:** 1x Strawberry Sweet Berry Glaze (0.5kg, Khoaa Eggless base)
   - **Kitchen Dispatch:** Bhagel Chaupal, Khatoti Kua Branch (Mathura).
@@ -94,7 +94,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ![Refund & Replacement Resolution](08_refund_replacement_resolution.png)
 - **Component:** Refund Procedure Guidance.
 - **User Query:** *"i got previous was damaged how i raise refund ."*
-- **Resolution:** Step-by-step instructions (photo verification within 2 hours via WhatsApp helpline `+91 8923701210`) with priority re-baking dispatch within 60-90 minutes.
+- **Resolution:** Step-by-step instructions (photo verification within 2 hours via store WhatsApp helpline `+91 ******1210`) with priority re-baking dispatch within 60-90 minutes.
 
 ---
 
@@ -177,22 +177,13 @@ Shri Ram Baker par har cake order par fresh bake hota hai (3-4 ghante wait time)
 
 ## 4. Automated Test Suite Execution
 ```text
-pytest submissions/bakebox-choco-ai/tests -v
+python -m unittest discover -s submissions/bakebox-choco-ai/tests -v
 
-tests/test_retrieval.py::TestBakeboxRetrieval::test_3way_rrf_scoring_formula PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_bm25_lexical_scoring PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_no_order_hijack PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_order_tracking PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_policy PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_filter_upto_three_cards_dynamic PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_session_isolation_and_buffer_memory PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_masked_connection_string_security PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_sample_bakery_documents_schema PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_intent_classification_general_inquiry PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_order_tracking_security_phone_verification PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_policy_metadata_filtering PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_session_memory_ttl_expiration_and_cleanup PASSED
-tests/test_retrieval.py::TestBakeboxRetrieval::test_retriever_dynamic_index_synchronization PASSED
-
-============================== 14 passed in 0.05s ==============================
+# Covers 6 test modules (64 tests total):
+# - test_audit_chain.py        (9 tests: genesis block, hash chaining, tamper & concurrency detection)
+# - test_guardrails_and_api.py (12 tests: prompt injection, SQLi defense, 2FA /refund, least-privilege RO user)
+# - test_order_concurrency.py  (12 tests: FOR UPDATE WITH RS race stress, BOM CTE, SP callproc, seeding)
+# - test_retrieval.py          (14 tests: RRF, BM25, intent routing, 2FA order tracking, PII masking)
+# - test_rrf_fusion.py         (10 tests: RRF k=60 formula, saturation, empty/tie edge cases)
+# - test_session_memory.py     (7 tests: multi-tenant isolation, sliding window, TTL, PII helpers)
 ```

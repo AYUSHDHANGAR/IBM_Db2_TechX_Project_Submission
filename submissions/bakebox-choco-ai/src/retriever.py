@@ -63,8 +63,15 @@ class SimpleBM25:
     """
     Lightweight, high-performance Okapi BM25 implementation for lexical sparse retrieval.
     Precomputes term frequencies using hash maps (O(1) lookups) avoiding repeated list scanning.
-    Zero external heavy dependencies; calculates exact BM25 scores across corpus tokens.
+    Filters common English stopwords so filler words never distort IDF weights.
     """
+    _STOP_WORDS = frozenset({
+        "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "for",
+        "from", "how", "i", "in", "is", "it", "me", "my", "of", "on", "or",
+        "our", "should", "that", "the", "this", "to", "was", "what", "when",
+        "where", "which", "who", "with", "you", "your"
+    })
+
     def __init__(self, corpus_texts: List[str], k1: float = 1.5, b: float = 0.75):
         self.k1 = k1
         self.b = b
@@ -81,7 +88,8 @@ class SimpleBM25:
                 self.df[term] = self.df.get(term, 0) + 1
 
     def _tokenize(self, text: str) -> List[str]:
-        return re.findall(r'\b[a-zA-Z0-9_\-]+\b', text.lower())
+        tokens = re.findall(r'\b[a-zA-Z0-9_\-]+\b', text.lower())
+        return [t for t in tokens if t not in self._STOP_WORDS]
 
     def score(self, query: str) -> List[float]:
         q_tokens = self._tokenize(query)

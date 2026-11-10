@@ -7,6 +7,7 @@ test reproducibility for judges without live Db2 credentials.
 """
 import os
 import sys
+import json
 import threading
 from pathlib import Path
 from contextlib import contextmanager
@@ -37,14 +38,25 @@ DB2_PORT = os.getenv("DB2_PORT", "50000")
 DB2_DATABASE = os.getenv("DB2_DATABASE", "IBMDB201")
 DB2_FORCE_MOCK = os.getenv("DB2_FORCE_MOCK", "false").lower() in ("true", "1", "yes")
 
-def get_connection_string() -> str:
+def _resolve_db2_credentials(readonly: bool = False) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve Db2 credentials on-demand, preferring least-privilege read-only credentials
+    when readonly=True and DB2_READONLY_USER/DB2_READONLY_PASSWORD are configured.
+    """
+    if readonly:
+        ro_user = os.getenv("DB2_READONLY_USER")
+        ro_pwd = os.getenv("DB2_READONLY_PASSWORD")
+        if ro_user and ro_pwd and ro_user not in ("your_db2_readonly_username_here", "dummy_user"):
+            return ro_user, ro_pwd
+    return os.getenv("DB2_USER"), os.getenv("DB2_PASSWORD")
+
+def get_connection_string(readonly: bool = False) -> str:
     """
     Build and validate standard IBM Db2 TCPIP connection string.
     Credentials are read on-demand to prevent storing secrets in module-level memory.
     Raises ValueError if required database credentials are missing.
     """
-    db_user = os.getenv("DB2_USER")
-    db_password = os.getenv("DB2_PASSWORD")
+    db_user, db_password = _resolve_db2_credentials(readonly=readonly)
     if not db_user or not db_password:
         raise ValueError(
             "Missing Db2 credentials! Please configure DB2_USER and DB2_PASSWORD "
@@ -59,9 +71,10 @@ def get_connection_string() -> str:
         f"PWD={db_password};"
     )
 
-def get_masked_connection_string() -> str:
+def get_masked_connection_string(readonly: bool = False) -> str:
     """Returns safe connection string with password masked for safe logging/display."""
-    db_user = os.getenv("DB2_USER", "db2inst1")
+    db_user, _ = _resolve_db2_credentials(readonly=readonly)
+    db_user = db_user or "db2inst1"
     return f"DATABASE={DB2_DATABASE};HOSTNAME={DB2_HOST};PORT={DB2_PORT};PROTOCOL=TCPIP;UID={db_user};PWD=********;"
 
 def is_live_db2_available() -> bool:
@@ -70,7 +83,7 @@ def is_live_db2_available() -> bool:
         return False
     user = os.getenv("DB2_USER")
     pwd = os.getenv("DB2_PASSWORD")
-    return bool(user and pwd and user not in ("your_db2_username", "dummy_user"))
+    return bool(user and pwd and user not in ("your_db2_username", "your_db2_app_username_here", "dummy_user"))
 
 
 # ==============================================================================
@@ -104,8 +117,31 @@ class MockDb2Cursor:
             clean_sql = " ".join(sql.strip().split())
             sql_upper = clean_sql.upper()
 
-            # 1. Recursive Recipe Bill-of-Materials (BOM) Query
-            if "WITH RECURSIVE RECIPE_BOM" in sql_upper or "RECIPE_BOM" in sql_upper:
+            # 0a. Exclusive Table Lock (IBM Db2 LUW concurrency serialization)
+            if sql_upper.startswith("LOCK TABLE BB_AUDIT_LOG"):
+                self.description = None
+                self._results = []
+                self.rowcount = 0
+                return self
+
+            # 0. COUNT(*) idempotency check for ingest seeding
+            if "SELECT COUNT(*) AS CNT FROM" in sql_upper:
+                self.description = [("CNT", "INT")]
+                cnt = 0
+                if "FROM BB_ORDERS" in sql_upper and params:
+                    cnt = 1 if params[0] in self.connection.tables["BB_ORDERS"] else 0
+                elif "FROM BB_CAKES" in sql_upper and params:
+                    cnt = 1 if params[0] in self.connection.tables["BB_CAKES"] else 0
+                elif "FROM BB_INVENTORY" in sql_upper and params:
+                    cnt = 1 if params[0] in self.connection.tables["BB_INVENTORY"] else 0
+                elif "FROM BB_RECIPES" in sql_upper and params:
+                    cnt = len(self.connection.tables["BB_RECIPES"].get(params[0], []))
+                self._results = [(cnt,)]
+                self.rowcount = 1
+                return self
+
+            # 1. Recipe Bill-of-Materials (BOM) CTE Query
+            if "WITH RECIPE_BOM" in sql_upper or "RECIPE_BOM" in sql_upper:
                 cake_id = params[0] if params else 1
                 bom_results = self.connection.get_recipe_bom(cake_id)
                 self.description = [
@@ -165,15 +201,10 @@ class MockDb2Cursor:
             if "SP_RESERVE_CAKE_STOCK" in sql_upper:
                 cake_id = params[0]
                 deduct_qty = params[1]
-                cake = self.connection.tables["BB_CAKES"].get(cake_id)
+                success = self._reserve_cake_stock_mock(cake_id, deduct_qty)
                 self.description = [("SUCCESS", "INTEGER")]
-                if cake and cake["STOCK_QTY"] >= deduct_qty:
-                    cake["STOCK_QTY"] -= deduct_qty
-                    self._results = [(1,)]
-                    self.rowcount = 1
-                else:
-                    self._results = [(0,)]
-                    self.rowcount = 0
+                self._results = [(success,)]
+                self.rowcount = 1 if success else 0
                 return self
 
             # 5. INSERT INTO BB_AUDIT_LOG
@@ -196,6 +227,11 @@ class MockDb2Cursor:
             # 6. SELECT FROM BB_AUDIT_LOG ORDER BY LOG_ID
             if "SELECT" in sql_upper and "FROM BB_AUDIT_LOG" in sql_upper:
                 logs = self.connection.tables["BB_AUDIT_LOG"]
+                if "ORDER BY LOG_ID DESC" in sql_upper and "FETCH FIRST 1 ROW" in sql_upper:
+                    self.description = [("CURRENT_HASH", "VARCHAR")]
+                    self._results = [(logs[-1]["CURRENT_HASH"],)] if logs else []
+                    self.rowcount = len(self._results)
+                    return self
                 self.description = [
                     ("LOG_ID", "INT"),
                     ("SESSION_ID", "VARCHAR"),
@@ -258,12 +294,15 @@ class MockDb2Cursor:
                     ("ITEM_NAME", "VARCHAR"), ("QUANTITY", "INT"), ("UNIT_PRICE", "DECIMAL"),
                     ("CAKE_BASE", "VARCHAR"), ("CAKE_WEIGHT", "VARCHAR"), ("CUSTOM_MESSAGE", "VARCHAR")
                 ]
-                if order_id == 1002:
-                    self._results = [(1, 1002, "BB-RED-02-1kg", "Red Velvet Heart Love Affair", 1, 649.00, "Khoaa (Eggless)", "1.0kg", "Happy 1st Anniversary")]
-                elif order_id == 1104:
-                    self._results = [(2, 1104, "BB-BLK-01-05kg", "Black Forest Classic Gateau", 1, 249.00, "Pure Veg Eggless", "0.5kg", "Happy Birthday Choti")]
-                else:
-                    self._results = []
+                items = self.connection.tables.get("BB_ORDER_ITEMS", {}).get(order_id, [])
+                self._results = [
+                    (
+                        it["item_id"], it["order_id"], it["sku_id"], it["item_name"],
+                        it["quantity"], it["unit_price"], it["cake_base"],
+                        it["cake_weight"], it["custom_message"]
+                    )
+                    for it in items
+                ]
                 self.rowcount = len(self._results)
                 return self
 
@@ -289,6 +328,28 @@ class MockDb2Cursor:
             self._results = [("OK",)]
             self.rowcount = 1
             return self
+
+    def _reserve_cake_stock_mock(self, cake_id: int, deduct_qty: int) -> int:
+        """Atomically decrements mock cake stock and returns 1 on success, 0 otherwise."""
+        if deduct_qty <= 0:
+            return 0
+        cake = self.connection.tables["BB_CAKES"].get(cake_id)
+        if cake and cake["STOCK_QTY"] >= deduct_qty:
+            cake["STOCK_QTY"] -= deduct_qty
+            return 1
+        return 0
+
+    def callproc(self, procname: str, params: Tuple = ()) -> Tuple:
+        """PEP 249 / ibm_db_dbi stored procedure invocation emulation."""
+        if self._closed:
+            raise RuntimeError("Cannot execute on a closed cursor.")
+        with self.connection.lock:
+            if procname.upper() == "SP_RESERVE_CAKE_STOCK":
+                cake_id = params[0]
+                deduct_qty = params[1]
+                success = self._reserve_cake_stock_mock(cake_id, deduct_qty)
+                return (cake_id, deduct_qty, success)
+            return tuple(params)
 
     def fetchone(self) -> Optional[Tuple]:
         if self._idx < len(self._results):
@@ -317,6 +378,67 @@ class MockDb2Connection:
 
     def _initialize(self):
         self.lock = threading.RLock()
+        orders_map: Dict[int, Dict[str, Any]] = {}
+        order_items_map: Dict[int, List[Dict[str, Any]]] = {}
+
+        orders_json_path = Path(__file__).resolve().parent.parent / "data" / "sample_orders.json"
+        if orders_json_path.is_file():
+            try:
+                with open(orders_json_path, "r", encoding="utf-8") as f:
+                    seed_orders = json.load(f)
+                next_item_id = 1
+                for ord_data in seed_orders:
+                    oid = int(ord_data["order_id"])
+                    orders_map[oid] = {
+                        "order_id": oid,
+                        "user_id": ord_data.get("user_id", 1),
+                        "customer_name": ord_data.get("customer_name", "Customer"),
+                        "customer_phone": ord_data.get("customer_phone", ""),
+                        "order_type": ord_data.get("order_type", "DELIVERY"),
+                        "order_status": ord_data.get("order_status", "CONFIRMED"),
+                        "total_amount": float(ord_data.get("total_amount", 0.0)),
+                        "delivery_address": ord_data.get("delivery_address", ""),
+                        "special_notes": ord_data.get("special_notes", ""),
+                        "created_at": ord_data.get("created_at", "2026-11-09 10:15:00"),
+                    }
+                    order_items_map[oid] = []
+                    for itm in ord_data.get("items", []):
+                        order_items_map[oid].append({
+                            "item_id": next_item_id,
+                            "order_id": oid,
+                            "sku_id": itm.get("sku_id", ""),
+                            "item_name": itm.get("item_name", "Bakery Item"),
+                            "quantity": int(itm.get("quantity", 1)),
+                            "unit_price": float(itm.get("unit_price", 0.0)),
+                            "cake_base": itm.get("cake_base", "Khoaa (Eggless)"),
+                            "cake_weight": itm.get("cake_weight", "1.0kg"),
+                            "custom_message": itm.get("custom_message", ""),
+                        })
+                        next_item_id += 1
+            except Exception:
+                orders_map = {}
+                order_items_map = {}
+
+        if not orders_map:
+            orders_map = {
+                1002: {
+                    "order_id": 1002, "user_id": 3, "customer_name": "Rahul Sharma",
+                    "customer_phone": "+91 9876543210", "order_type": "DELIVERY", "order_status": "BAKING",
+                    "total_amount": 649.00, "delivery_address": "Flat 402, Krishna Heights, Mathura, UP",
+                    "special_notes": "Happy 1st Anniversary Celebration", "created_at": "2026-11-09 10:15:00"
+                },
+                1104: {
+                    "order_id": 1104, "user_id": 5, "customer_name": "Pooja Verma",
+                    "customer_phone": "+91 9811223344", "order_type": "DELIVERY", "order_status": "CONFIRMED",
+                    "total_amount": 249.00, "delivery_address": "Civil Lines, Mathura, UP",
+                    "special_notes": "Birthday Surprise for Sister", "created_at": "2026-11-09 11:30:00"
+                }
+            }
+            order_items_map = {
+                1002: [{"item_id": 1, "order_id": 1002, "sku_id": "BB-RED-02-1kg", "item_name": "Red Velvet Heart Love Affair", "quantity": 1, "unit_price": 649.00, "cake_base": "Khoaa (Eggless)", "cake_weight": "1.0kg", "custom_message": "Happy 1st Anniversary"}],
+                1104: [{"item_id": 2, "order_id": 1104, "sku_id": "BB-BLK-01-05kg", "item_name": "Black Forest Classic Cherry Gateau", "quantity": 1, "unit_price": 249.00, "cake_base": "Pure Veg Eggless", "cake_weight": "0.5kg", "custom_message": "Happy Birthday Choti"}],
+            }
+
         self.tables = {
             "BB_CAKES": {
                 1: {"CAKE_ID": 1, "NAME": "Red Velvet Crimson Crumb Crown", "STOCK_QTY": 5, "PRICE": 649.0},
@@ -340,20 +462,8 @@ class MockDb2Connection:
                     {"CAKE_ID": 2, "INGREDIENT_NAME": "Maraschino Cherries", "QTY_NEEDED": 0.5, "INGREDIENT_ID": 104}  # Insufficient stock!
                 ]
             },
-            "BB_ORDERS": {
-                1002: {
-                    "order_id": 1002, "user_id": 3, "customer_name": "Rahul Sharma",
-                    "customer_phone": "+91 9876543210", "order_type": "DELIVERY", "order_status": "BAKING",
-                    "total_amount": 649.00, "delivery_address": "Flat 402, Krishna Heights, Mathura, UP",
-                    "special_notes": "Happy 1st Anniversary Celebration", "created_at": "2026-11-09 10:15:00"
-                },
-                1104: {
-                    "order_id": 1104, "user_id": 5, "customer_name": "Pooja Verma",
-                    "customer_phone": "+91 9811223344", "order_type": "DELIVERY", "order_status": "CONFIRMED",
-                    "total_amount": 249.00, "delivery_address": "Civil Lines, Mathura, UP",
-                    "special_notes": "Birthday Surprise for Sister", "created_at": "2026-11-09 11:30:00"
-                }
-            },
+            "BB_ORDERS": orders_map,
+            "BB_ORDER_ITEMS": order_items_map,
             "BB_AUDIT_LOG": []
         }
 
@@ -395,27 +505,27 @@ class MockDb2Connection:
 # CONNECTION FACTORY FUNCTIONS
 # ==============================================================================
 
-def get_raw_connection():
+def get_raw_connection(readonly: bool = False):
     """Returns a raw ibm_db connection, or MockDb2Connection if offline."""
     if is_live_db2_available():
-        conn_str = get_connection_string()
+        conn_str = get_connection_string(readonly=readonly)
         return ibm_db.connect(conn_str, "", "")
     return MockDb2Connection()
 
-def get_dbi_connection():
+def get_dbi_connection(readonly: bool = False):
     """Returns an active Python DB-API 2.0 connection using ibm_db_dbi or MockDb2Connection."""
     if is_live_db2_available():
-        conn_str = get_connection_string()
+        conn_str = get_connection_string(readonly=readonly)
         return ibm_db_dbi.connect(conn_str, "", "")
     return MockDb2Connection()
 
 @contextmanager
-def db_session():
+def db_session(readonly: bool = False):
     """
     Context manager for safe database cursor execution.
     Ensures automatic commit on success and automatic rollback on exception.
     """
-    conn = get_dbi_connection()
+    conn = get_dbi_connection(readonly=readonly)
     try:
         yield conn
         conn.commit()

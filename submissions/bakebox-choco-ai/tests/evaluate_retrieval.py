@@ -23,6 +23,7 @@ if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
 from src.query_engine import ChocoQueryEngine
+from src.ingest import get_sample_bakery_documents
 
 # ==============================================================================
 # 30 CURATED EVALUATION BENCHMARK DATASET WITH GROUND-TRUTH ANNOTATIONS
@@ -195,7 +196,8 @@ def run_benchmark():
     print("==================================================================\n")
 
     engine = ChocoQueryEngine(use_llm=False)
-    
+    text_to_doc_id = {d["text"]: d["id"] for d in get_sample_bakery_documents()}
+
     total_queries = len(BENCHMARK_TEST_SUITE)
     hits_at_1 = 0
     hits_at_3 = 0
@@ -211,22 +213,28 @@ def run_benchmark():
         cat = item["category"]
 
         t_start = time.perf_counter()
-        
+
         if "Policy" in cat or "Advisory" in cat or "Info" in cat:
-            # Policy retrieval channel
+            # Policy retrieval channel: verify exact expected policy document IDs match
             policy_texts = engine.tool_get_store_policy_or_advisory(q)
             t_elapsed = (time.perf_counter() - t_start) * 1000
             latencies.append(t_elapsed)
-            
-            # Policy match evaluation
+
+            retrieved_ids = [text_to_doc_id.get(txt, "") for txt in policy_texts]
             found_rank = None
-            if policy_texts:
-                found_rank = 1  # Successfully returned relevant policy chunks
-            
+            for rank, doc_id in enumerate(retrieved_ids, start=1):
+                if doc_id in expected:
+                    found_rank = rank
+                    break
+
             if found_rank == 1:
                 hits_at_1 += 1
                 hits_at_3 += 1
                 reciprocal_ranks.append(1.0)
+                status_str = "HIT"
+            elif found_rank and found_rank <= 3:
+                hits_at_3 += 1
+                reciprocal_ranks.append(1.0 / found_rank)
                 status_str = "HIT"
             else:
                 reciprocal_ranks.append(0.0)

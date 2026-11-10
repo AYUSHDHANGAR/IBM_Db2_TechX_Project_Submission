@@ -10,9 +10,12 @@ import os
 import sys
 import json
 import hashlib
+import threading
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Tuple
+
+_AUDIT_CHAIN_LOCK = threading.RLock()
 
 _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _pkg_root not in sys.path:
@@ -65,31 +68,37 @@ def reserve_cake_stock_atomic(conn: Any, cake_id: int, quantity: int = 1) -> boo
 
 def call_sp_reserve_cake_stock(conn: Any, cake_id: int, quantity: int = 1) -> bool:
     """
-    Executes native IBM Db2 Stored Procedure 'CALL SP_RESERVE_CAKE_STOCK(?, ?, ?)'
-    with atomic row-locking fallback, satisfying enterprise stored procedure criteria.
+    Executes native IBM Db2 Stored Procedure SP_RESERVE_CAKE_STOCK(IN p_cake_id, IN p_qty, OUT p_success)
+    via PEP 249 / ibm_db_dbi cursor.callproc() with atomic row-locking SQL fallback.
     """
+    if quantity <= 0:
+        return False
+
+    cursor = conn.cursor()
     try:
-        cursor = conn.cursor()
-        cursor.execute("CALL SP_RESERVE_CAKE_STOCK(?, ?, ?)", (cake_id, quantity, 0))
-        res = cursor.fetchone()
-        cursor.close()
-        return bool(res and res[0] == 1)
+        if hasattr(cursor, "callproc"):
+            res = cursor.callproc("SP_RESERVE_CAKE_STOCK", (cake_id, quantity, 0))
+            return bool(res and len(res) >= 3 and res[2] == 1)
     except Exception:
-        return reserve_cake_stock_atomic(conn, cake_id, quantity)
+        pass
+    finally:
+        cursor.close()
+
+    return reserve_cake_stock_atomic(conn, cake_id, quantity)
 
 
 # ==============================================================================
-# 2. IN-DATABASE RECURSIVE BILL-OF-MATERIALS (BOM) CTE
+# 2. IN-DATABASE BILL-OF-MATERIALS (BOM) CTE (IBM Db2 LUW COMPATIBLE)
 # ==============================================================================
 
 def check_recipe_bom_availability(conn: Any, cake_id: int) -> List[Dict[str, Any]]:
     """
-    Executes an in-database Recursive Bill-of-Materials (BOM) Common Table Expression.
-    Evaluates hierarchical recipe ingredient dependencies against warehouse inventory
+    Executes an in-database Bill-of-Materials (BOM) Common Table Expression (IBM Db2 LUW).
+    Evaluates recipe ingredient dependencies against warehouse inventory
     to verify if Mathura baking kitchens (Holigate / Gosna) can fulfill the cake order.
     """
     sql = """
-    WITH RECURSIVE RECIPE_BOM (CAKE_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
+    WITH RECIPE_BOM (CAKE_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
         SELECT c.CAKE_ID, r.INGREDIENT_NAME, r.QTY_NEEDED, i.STOCK_QTY
         FROM BB_CAKES c
         JOIN BB_RECIPES r ON c.CAKE_ID = r.CAKE_ID
@@ -123,26 +132,39 @@ def compute_block_hash(prev_hash: str, session_id: str, action_type: str, payloa
 
 def get_latest_audit_hash(conn: Any) -> str:
     """Fetches the current hash of the most recent audit block, or genesis hash if empty."""
-    sql = "SELECT CURRENT_HASH FROM BB_AUDIT_LOG ORDER BY LOG_ID"
+    sql = "SELECT CURRENT_HASH FROM BB_AUDIT_LOG ORDER BY LOG_ID DESC FETCH FIRST 1 ROW ONLY"
     rows = execute_query(conn, sql)
     if rows:
-        return rows[-1]["CURRENT_HASH"]
+        return rows[0]["CURRENT_HASH"]
     return GENESIS_PREV_HASH
 
 def append_audit_log(conn: Any, session_id: str, action_type: str, payload_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
     Appends a tamper-evident audit record to BB_AUDIT_LOG with SHA-256 hash chaining.
-    Ensures every order creation, stock lock, and refund evaluation is cryptographically traceable.
+    Serializes concurrent writers with a process lock and Db2 LOCK TABLE BB_AUDIT_LOG
+    IN EXCLUSIVE MODE within a single transaction to prevent hash-chain forks.
     """
     canonical_payload = json.dumps(payload_dict, sort_keys=True)
-    prev_hash = get_latest_audit_hash(conn)
-    current_hash = compute_block_hash(prev_hash, session_id, action_type, canonical_payload)
+    with _AUDIT_CHAIN_LOCK:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE")
+            cursor.execute("SELECT CURRENT_HASH FROM BB_AUDIT_LOG ORDER BY LOG_ID DESC FETCH FIRST 1 ROW ONLY")
+            row = cursor.fetchone()
+            prev_hash = row[0] if row else GENESIS_PREV_HASH
+            current_hash = compute_block_hash(prev_hash, session_id, action_type, canonical_payload)
 
-    insert_sql = """
-    INSERT INTO BB_AUDIT_LOG (SESSION_ID, ACTION_TYPE, PAYLOAD, PREV_HASH, CURRENT_HASH)
-    VALUES (?, ?, ?, ?, ?)
-    """
-    execute_dml(conn, insert_sql, (session_id, action_type, canonical_payload, prev_hash, current_hash))
+            insert_sql = """
+            INSERT INTO BB_AUDIT_LOG (SESSION_ID, ACTION_TYPE, PAYLOAD, PREV_HASH, CURRENT_HASH)
+            VALUES (?, ?, ?, ?, ?)
+            """
+            cursor.execute(insert_sql, (session_id, action_type, canonical_payload, prev_hash, current_hash))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cursor.close()
 
     return {
         "session_id": session_id,

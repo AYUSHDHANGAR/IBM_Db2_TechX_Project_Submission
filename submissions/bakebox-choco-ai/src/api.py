@@ -24,11 +24,12 @@ try:
     from pydantic import BaseModel, Field
 except ImportError:
     FastAPI = None
+    HTTPException = None
     BaseModel = object
     Field = lambda *args, **kwargs: None
 
 from src.db import is_live_db2_available, get_dbi_connection
-from src.query_engine import ChocoQueryEngine
+from src.query_engine import ChocoQueryEngine, check_prompt_security
 from src.order_engine import evaluate_refund_request
 
 START_TIME = time.time()
@@ -37,31 +38,8 @@ engine_instance: Optional[ChocoQueryEngine] = None
 def get_engine() -> ChocoQueryEngine:
     global engine_instance
     if engine_instance is None:
-        engine_instance = ChocoQueryEngine(use_llm=False)
+        engine_instance = ChocoQueryEngine(use_llm=True)
     return engine_instance
-
-# ==============================================================================
-# SECURITY GUARDRAILS & PROMPT INJECTION DEFENSE
-# ==============================================================================
-
-PROMPT_INJECTION_PATTERNS = [
-    re.compile(r"ignore\s+(all\s+)?(previous|prior)\s+instructions?", re.IGNORECASE),
-    re.compile(r"you\s+are\s+now\s+(in\s+)?developer\s+mode", re.IGNORECASE),
-    re.compile(r"system\s*prompt\s*override", re.IGNORECASE),
-    re.compile(r"(price\s*[:=]\s*0|set\s+price\s+to\s+0|make\s+everything\s+free)", re.IGNORECASE),
-    re.compile(r"(drop\s+table|delete\s+from\s+bb_|truncate\s+table)", re.IGNORECASE),
-    re.compile(r"<script>|javascript:|alert\(", re.IGNORECASE),
-]
-
-def check_prompt_security(message: str) -> Tuple[bool, Optional[str]]:
-    """
-    Evaluates input message against compiled prompt injection patterns.
-    Returns (is_safe: bool, flagged_reason: Optional[str]).
-    """
-    for pattern in PROMPT_INJECTION_PATTERNS:
-        if pattern.search(message):
-            return False, f"Malicious pattern detected: {pattern.pattern}"
-    return True, None
 
 
 # ==============================================================================
@@ -90,7 +68,8 @@ if BaseModel is not object:
         guardrail_triggered: bool = False
 
     class RefundRequest(BaseModel):
-        reason: str = Field("Cake damaged in transit or incorrect base delivered", description="Reason for refund request")
+        reason: str = Field("Cake damaged in transit or incorrect base delivered", min_length=3, max_length=500, description="Reason for refund request")
+        phone: str = Field(..., min_length=10, max_length=20, description="Registered 10-digit customer mobile number for two-factor verification")
 else:
     class CakeCardSchema:
         def __init__(self, name: str, price: float, eggless: bool = True, branches: List[str] = None, shelf_life: str = "24h", slug: str = "", score: float = None):
@@ -116,8 +95,9 @@ else:
             self.guardrail_triggered = guardrail_triggered
 
     class RefundRequest:
-        def __init__(self, reason: str = "Damaged"):
+        def __init__(self, reason: str = "Damaged", phone: str = ""):
             self.reason = reason
+            self.phone = phone
 
 
 # ==============================================================================
@@ -136,32 +116,27 @@ def get_health_status() -> Dict[str, Any]:
             "3-Way Hybrid Reciprocal Rank Fusion (k=60)",
             "Db2 Native Vector Store (DB2LlamaVS)",
             "Row-Level ACID Concurrency (SELECT FOR UPDATE WITH RS)",
-            "Recursive Bill-of-Materials (BOM) CTE",
+            "Stored Procedure Stock Reservation (SP_RESERVE_CAKE_STOCK via callproc)",
+            "In-Database Bill-of-Materials (BOM) CTE (WITH RECIPE_BOM)",
             "Cryptographic SHA-256 Hash-Chained Audit Trail (BB_AUDIT_LOG)"
         ],
-        "catalog_items_indexed": len(engine.retriever.corpus_metadata) if hasattr(engine.retriever, "corpus_metadata") else 9,
+        "catalog_items_indexed": len(engine.retriever.corpus_nodes) if hasattr(engine.retriever, "corpus_nodes") else 0,
         "session_isolation": "ENABLED",
         "active_sessions": len(engine.sessions)
     }
 
 def chat_endpoint(req: ChatRequest) -> ChatResponse:
-    """Processes customer natural language chat through CHOCO AI with guardrail protection."""
-    is_safe, flag_reason = check_prompt_security(req.message)
-    if not is_safe:
+    """Processes customer natural language chat through CHOCO AI with shared guardrail protection."""
+    engine = get_engine()
+    result = engine.query(req.message, session_id=req.session_id)
+    if result.get("guardrail_triggered"):
         return ChatResponse(
-            reply=(
-                "Radhe Radhe ji! Shri Ram Baker's Choco AI customer safety filter triggered. "
-                "Aapka request hamare automated security guidelines ke mutabiq reject kar diya gaya hai. "
-                "Hum keval authentic bakery queries aur real order tracking process karte hain."
-            ),
+            reply=result["reply"],
             ui_cards=[],
             intent="SECURITY_VIOLATION",
             session_id=req.session_id,
             guardrail_triggered=True
         )
-
-    engine = get_engine()
-    result = engine.query(req.message, session_id=req.session_id)
 
     cards = []
     for card in result.get("ui_cards", []):
@@ -172,7 +147,7 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
             branches=["Holigate (Mathura)", "Gosna Highway Kitchen"],
             shelf_life="24 Hours (Chilled)",
             slug=card.get("sku_id", "cake-sku"),
-            score=card.get("score")
+            score=card.get("rrf_score", card.get("score"))
         ))
 
     return ChatResponse(
@@ -185,6 +160,12 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
 
 def search_cakes(q: str, eggless_only: bool = False) -> Dict[str, Any]:
     """Executes 3-Way Reciprocal Rank Fusion (Dense Vector + BM25 + TF-IDF) and returns top ranked cakes."""
+    is_safe, flag_reason = check_prompt_security(q)
+    if not is_safe:
+        if HTTPException is not None:
+            raise HTTPException(status_code=400, detail=f"Invalid search query blocked by guardrail: {flag_reason}")
+        return {"query": q, "total_matches": 0, "algorithm": "3-Way Reciprocal Rank Fusion (k=60)", "results": [], "guardrail_triggered": True}
+
     engine = get_engine()
     cards = engine.tool_recommend_cakes(q, limit=6)
     if eggless_only:
@@ -204,11 +185,37 @@ def get_order_tracking(order_id: int, phone: Optional[str] = None) -> Dict[str, 
         return {"status": "ORDER_NOT_FOUND", "message": f"Order #{order_id} not found."}
     return order
 
-def post_refund_request(order_id: int, req: Optional[RefundRequest] = None) -> Dict[str, Any]:
-    """Evaluates Shri Ram Baker's Happiness Guarantee policy against Db2 order status."""
+def post_refund_request(order_id: int, req: Optional[RefundRequest] = None, phone: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Evaluates Shri Ram Baker's Happiness Guarantee policy against Db2 order status.
+    Requires two-factor verification (order_id + customer registered phone number)
+    before permitting any order mutation.
+    """
+    auth_phone = (req.phone if req and getattr(req, "phone", None) else phone) or ""
+    engine = get_engine()
+    auth_check = engine.tool_track_live_order(order_id=order_id, phone_number=auth_phone or None)
+
+    if not auth_check:
+        if HTTPException is not None:
+            raise HTTPException(status_code=404, detail=f"Order #{order_id} not found.")
+        return {"eligible": False, "order_id": order_id, "status": "ORDER_NOT_FOUND", "message": f"Order #{order_id} not found."}
+
+    if auth_check.get("auth_error") == "VERIFICATION_REQUIRED":
+        if HTTPException is not None:
+            raise HTTPException(status_code=401, detail="Registered 10-digit phone number is required to authorize refund requests.")
+        return {"eligible": False, "order_id": order_id, "status": "VERIFICATION_REQUIRED", "message": "Registered 10-digit phone number is required to authorize refund requests."}
+
+    if auth_check.get("auth_error") == "PHONE_MISMATCH":
+        if HTTPException is not None:
+            raise HTTPException(status_code=403, detail="Phone number does not match order records.")
+        return {"eligible": False, "order_id": order_id, "status": "PHONE_MISMATCH", "message": "Phone number does not match order records."}
+
     conn = get_dbi_connection()
-    reason = req.reason if req else "Customer claim"
-    return evaluate_refund_request(conn, order_id=order_id, reason=reason)
+    try:
+        reason = req.reason if req else "Customer claim"
+        return evaluate_refund_request(conn, order_id=order_id, reason=reason)
+    finally:
+        conn.close()
 
 
 # ==============================================================================
@@ -228,12 +235,20 @@ if FastAPI is not None:
         lifespan=lifespan
     )
 
+    allowed_origins = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ALLOW_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000,http://localhost:8000"
+        ).split(",")
+        if origin.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST"],
+        allow_headers=["Content-Type", "Authorization"],
     )
 
     app.get("/", tags=["Health"])(get_health_status)
