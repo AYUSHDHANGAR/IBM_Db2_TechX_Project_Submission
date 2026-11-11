@@ -1,10 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "project": {
-    "title": "BAKEBOX-AI: AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT",
+    "title": "BAKEBOX-AI: Autonomous AI Bakery Management & Customer Support (CHOCO AI)",
     "slug": "bakebox-choco-ai",
-    "short_description": "Enterprise autonomous AI bakery management and customer engagement platform powered by CHOCO AI — leveraging IBM Db2 hybrid storage (relational ACID tables + native vector search via DB2LlamaVS), LlamaIndex Advanced Hybrid RAG fusing IBM Db2 native dense vectors with BM25 and TF-IDF lexical search via 3-way Reciprocal Rank Fusion (RRF: k=60), session isolation with conversation buffer memory, in-engine Bill-of-Materials (BOM) CTE (WITH RECIPE_BOM), row-level concurrency locking (SELECT FOR UPDATE WITH RS), stored procedure SP_RESERVE_CAKE_STOCK, cryptographic SHA-256 hash-chained audit trails (BB_AUDIT_LOG), least-privilege Db2 roles, and production FastAPI endpoints.",
-    "category": "AI / RAG / Data Engineering / Analytics",
+    "short_description": "Enterprise autonomous AI bakery platform powered by IBM Db2 12.1 — unifying native VECTOR(384, FLOAT32) search with BSON metadata pushdown (DB2LlamaVS), 3-Way Reciprocal Rank Fusion (k=60) + Hinglish CRAG + Self-RAG, Db2-persisted session buffers, in-database Multi-Level Recursive BOM CTE, row-level concurrency locking (FOR UPDATE WITH RS + SP_RESERVE_CAKE_STOCK), cryptographic SHA-256 hash-chained BB_AUDIT_LOG, and a hardened FastAPI REST API + interactive /demo playground.",
+    "category": "AI / RAG / Data Engineering / Enterprise Security",
     "demo_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
     "video_url": "https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM",
     "linkedin_post": "https://lnkd.in/p/gtXgu6wq",
@@ -22,25 +22,24 @@
     ]
   },
   "ibm_db2": {
-    "edition": "Db2 Community Edition (Docker / VS Code Extension - IBMDB201)",
+    "edition": "Db2 Community Edition 12.1 (Docker / VS Code Extension - IBMDB201)",
     "connector": "ibm_db / ibm_db_dbi / llama-index-vector-stores-db2 (DB2LlamaVS)",
     "features_used": [
-      "In-Database Bill-of-Materials (BOM) CTE (WITH RECIPE_BOM)",
-      "Row-Level Concurrency Locking (SELECT FOR UPDATE WITH RS)",
-      "Native Stored Procedure SP_RESERVE_CAKE_STOCK via callproc()",
-      "Cryptographic SHA-256 Hash-Chained Audit Trail (BB_AUDIT_LOG + LOCK TABLE)",
-      "Least-Privilege Db2 Roles (BAKEBOX_READER_ROLE & BAKEBOX_APP_ROLE)",
-      "Zero-Docker Offline Fallback & Mock Sandbox",
-      "3-Way Hybrid RRF Vector Search (DB2LlamaVS + BM25 + TF-IDF)",
-      "Native VECTOR(384, FLOAT32) Column via DB2LlamaVS",
-      "In-engine Cosine Vector Search via DB2LlamaVS",
-      "Relational Transactional Tables (BB_ORDERS, BB_ORDER_ITEMS, BB_CAKES, BB_INVENTORY, BB_RECIPES)",
-      "Direct DB-API 2.0 Connection Management with Automatic Commit/Rollback"
+      "Native VECTOR(384, FLOAT32) Column with COSINE Similarity & SYSTOOLS.BSON2JSON Metadata Pushdown",
+      "3-Way Hybrid Reciprocal Rank Fusion (DB2LlamaVS + Okapi BM25 + TF-IDF) + Hinglish CRAG",
+      "In-Database Multi-Level Recursive BOM CTE (UNION ALL DECIMAL(10,4) Sub-Assembly Depletion)",
+      "Native Db2 SQL PL Stored Procedure (SP_RESERVE_CAKE_STOCK WHERE CURRENT OF WITH RS)",
+      "Single-UOW ACID Order Transaction (BOM Check -> Stock Lock -> BB_ORDERS/ITEMS -> BB_AUDIT_LOG)",
+      "Cryptographic SHA-256 Hash-Chained Append-Only Audit Trail (BB_AUDIT_LOG)",
+      "Db2-Persisted Isolated Conversation Buffer (BB_USER_CONVERSATION_BUFFER)",
+      "Sargable Normalized Indexing (phone_last10 B-Tree Index) & Masked Operational SQL Views",
+      "Least-Privilege Db2 RBAC Roles (sql/least_privilege_setup.sql)",
+      "Snapshot-Rollback PEP 249 MockDb2 & Cosine Vector Simulator for Offline Reproducibility"
     ]
   },
   "tech_stack": {
-    "languages": ["Python"],
-    "frameworks": ["LlamaIndex", "llama-index-vector-stores-db2", "FastAPI", "scikit-learn"],
-    "ai_models": ["BAAI/bge-small-en-v1.5 (Local FastEmbed / SentenceTransformers)", "Google Gemini 1.5 Flash (with 2.0 / 3.x compatibility)"]
+    "languages": ["Python", "SQL", "HTML/JavaScript"],
+    "frameworks": ["FastAPI", "Pydantic v2", "LlamaIndex", "llama-index-vector-stores-db2", "scikit-learn", "FastEmbed"],
+    "ai_models": ["BAAI/bge-small-en-v1.5 (384-d Local Embeddings)", "Google Gemini 1.5 Flash (google-genai SDK with Offline Fallback)"]
   }
 }

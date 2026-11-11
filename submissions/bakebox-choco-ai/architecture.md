@@ -1,130 +1,95 @@
-# System Architecture: BAKEBOX-AI — AUTONOMOUS AI Bakery Management AND CUSTOMER SUPPORT
-## CHOCO AI: Advanced Hybrid RAG System on IBM Db2
+# System Architecture: BAKEBOX-AI — Autonomous AI Bakery Management & Customer Support
+## CHOCO AI: Enterprise Hybrid RAG & Transactional Platform on IBM Db2 LUW
 
-**Event:** IBM Db2 TechX Summit 2026 • GL Bajaj Group of Institutions, Mathura (Db2Hack Dev Hacks)  
+**Event:** IBM Db2 TechX Summit 2026 · GL Bajaj Group of Institutions, Mathura (Db2Hack Dev Hacks)  
 **Project Slug:** `submissions/bakebox-choco-ai`  
 **Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR)) · BTech CSE-AIML, 4th Year · AI Systems & Db2 Solutions Architect  
-**Frameworks:** LlamaIndex, `llama-index-vector-stores-db2` (`DB2LlamaVS`), IBM Db2 (`ibm_db`, `ibm_db_dbi`), scikit-learn, Google Gemini
+**Core Stack:** IBM Db2 LUW 12.1 (`ibm_db`, `ibm_db_dbi`), LlamaIndex (`llama-index-vector-stores-db2` / `DB2LlamaVS`), Scikit-Learn, FastEmbed (`BAAI/bge-small-en-v1.5`), Google Gemini (`google-genai`), FastAPI
 
 ---
 
-## 1. Dual-Perspective Architecture Overview
+## 1. Dual-Perspective Problem & Architecture Overview
 
-BAKEBOX-AI is designed to solve operational and communication challenges from **two perspectives simultaneously** — the customer and bakery management:
+BAKEBOX-AI solves operational and communication bottlenecks for **Shri Ram Baker's** (a 20-year family bakery in Mathura operating across **Holigate / Khatoti Kua** and **Gosna**) from two synchronized perspectives:
 
-### Customer-Facing Pain Points Addressed:
-- **Information Hesitation:** Customers frequently hesitate or feel awkward asking detailed questions about product specs, ingredients, allergen details, custom sizing, or base recommendations (e.g. Khoaa Eggless).
-- **Operational & Tracking Blind Spots:** Real-time order status tracking, delivery updates, and fresh baking wait times are often locked behind phone calls or delayed support.
-- **Customer Care Availability Gaps:** Live customer support drops off drastically after 9 PM, leaving late-night craving inquiries, urgent modifications, and order tracking unaddressed.
-
-### Management & Business-Facing Pain Points Addressed:
-- **Lost Sales & Conversion Bottlenecks:** Because human customer support agents are unavailable after hours or overwhelmed during peak times, bakeries fail to capture high-intent inquiries and late-night orders.
-- **Missed Upselling Opportunities:** Static menus cannot proactively recommend matching cakes or suggest appropriate base customizers according to the customer's specific celebration.
-- **Operational Inefficiencies:** Manually answering repetitive inquiries about baking wait times, patty reheating instructions, and order status drains staff bandwidth.
-
-### How CHOCO AI Bridges Both Perspectives:
-- **Instant 24/7 Access:** Available around the clock for late-night queries, live order tracking, and cake discovery.
-- **Personalized Product Guidance:** Suggests up to 3 best-fit cakes based on semantic flavor preference and celebration type.
-- **Agentic Ground-Truth Retrieval:** Direct transactional queries to IBM Db2 relational tables provide exact order status reports, eliminating hallucinations.
-- **Bilingual Interaction:** Native support for bilingual Hindi and English phrasing to match local customer demographics.
+1. **Customer Experience Perspective:**
+   * Eliminates hesitation around sweetness profiles, allergens, portion sizing (`0.5kg` vs `1.0kg`), and **Khoaa Eggless** bases.
+   * Delivers 24/7 bilingual (**English & Hinglish**) assistance past 9 PM closing hours.
+   * Prevents misinformation via **Self-RAG fact verification** (3–4h fresh-baking timelines, dry tawa patty reheating) and real-time order verification.
+2. **Bakery Operations & Engineering Perspective:**
+   * Eliminates late-night order abandonment and staff repetitive-query fatigue.
+   * Guarantees zero overselling on last-item stock via Db2 **Read Stability (`FOR UPDATE WITH RS`)** row locks.
+   * Prevents promising out-of-stock cakes by traversing multi-level sub-assemblies through an in-database **Recursive BOM CTE** before accepting orders.
+   * Enforces immutable governance with a **SHA-256 hash-chained `BB_AUDIT_LOG`** and least-privilege Db2 roles.
 
 ---
 
-## 2. High-Level System Architecture
-
-BAKEBOX bridges traditional enterprise relational data with modern AI retrieval by leveraging **IBM Db2** simultaneously as:
-1. **A Native High-Dimensional Vector Store:** Utilizing Db2 native `vector(384, FLOAT32)` columns and hardware-accelerated similarity search via `DB2LlamaVS`.
-2. **A Relational Transactional Database:** Housing real-time customer orders, order line items, customized cake bases, and store operational agreements under ACID guarantees.
+## 2. End-to-End System Topology
 
 ```mermaid
 flowchart TD
-    subgraph Client ["Client & Session Layer"]
-        User["Customer / Store Operator"]
-        Session["Session ID & Session Isolation"]
-        Query["Query: 'Show me red velvet cakes' OR 'Status of order #1002'"]
+    subgraph Client ["Client & API Layer (src/api.py & src/security.py)"]
+        User["Customer / Reviewer UI (/demo or Swagger /docs)"]
+        Guard["Unicode NFKC + Zero-Width Stripper\nBilingual Prompt Guard + XML Containment"]
+        Session["TTL SessionBufferMemory\n+ BB_USER_CONVERSATION_BUFFER (Db2)"]
     end
 
-    subgraph Orchestration ["LlamaIndex Orchestration & Memory"]
-        Engine["ChocoQueryEngine (src/query_engine.py)"]
-        BufferMem["SessionBufferMemory (Conversation History Buffer)"]
-        Dispatcher{"Agentic Tool Dispatcher"}
-        
-        ToolRec["Agentic Tool 1: recommend_cakes()\n(Renders UP TO 3 JSON Cards via 3-Way RRF: Db2 Cosine + BM25 + TF-IDF)"]
-        ToolOrder["Agentic Tool 2: track_live_order()\n(Real-Time Backend ACID Order Lookup)"]
-        ToolPolicy["Agentic Tool 3: get_store_policy_or_advisory()\n(Domain Knowledge Retrieval)"]
-        
-        HybridRetriever["Db2HybridRRFRetriever (src/retriever.py)"]
-        RRF["3-Way Reciprocal Rank Fusion (k=60)\nDb2 Dense + BM25 Lexical + TF-IDF Lexical"]
+    subgraph AI_Layer ["Agentic AI & Hybrid RAG (src/query_engine.py & src/retriever.py)"]
+        CRAG["Hinglish CRAG Query Expander\n('bina ande' -> Pure Veg Khoaa Eggless)"]
+        Dispatcher["Request-Scoped Agentic Dispatcher\n(google-genai Tools / Deterministic Fallback)"]
+        Hybrid["Db2HybridRRFRetriever\n3-Way Reciprocal Rank Fusion (k=60)"]
+        SelfRAG["Self-RAG Fact Verifier & Output Scrubber\n(Tawa Rule + Secret Redaction)"]
     end
 
-    subgraph IBM_Db2 ["IBM Db2 Engine (IBMDB201 / localhost:50000)"]
-        subgraph VectorStore ["Native Vector Tables (DB2LlamaVS)"]
-            BB_VECTORS[("BB_CHUNKS_VECTOR\nid, doc_id, embedding vector(384, FLOAT32), metadata, text")]
-        end
-        subgraph RelationalStore ["Transactional Relational Tables (ACID)"]
-            BB_ORDERS[("BB_ORDERS\norder_id, customer_name, customer_phone, order_status, total_amount")]
-            BB_ORDER_ITEMS[("BB_ORDER_ITEMS\nsku_id, item_name, quantity, unit_price, cake_base, cake_weight")]
-            BB_CAKES[("BB_CAKES & BB_RECIPES & BB_INVENTORY\ncake stock, BOM ingredients, FOR UPDATE WITH RS")]
-            BB_AUDIT[("BB_AUDIT_LOG\nSHA-256 hash-chained immutable audit trail")]
-        end
+    subgraph IBM_Db2 ["IBM Db2 LUW 12.1 Engine (src/db.py, ingest.py, vector_store.py, order_engine.py)"]
+        VectorStore[("BB_CHUNKS_VECTOR\nVECTOR(384, FLOAT32) + BSON Metadata Pushdown")]
+        Orders[("BB_ORDERS & BB_ORDER_ITEMS\nIndexed phone_last10 + FK ON DELETE CASCADE")]
+        Catalog[("BB_CAKES, BB_INVENTORY,\nBB_RECIPES, BB_INGREDIENT_COMPONENTS")]
+        Audit[("BB_AUDIT_LOG\nSHA-256 Chained Append-Only Trail")]
+        Views["V_ACTIVE_BAKERY_ORDERS\nV_MASKED_BAKERY_ORDERS"]
+        SP["SP_RESERVE_CAKE_STOCK\n(FOR UPDATE OF stock_qty WITH RS)"]
     end
 
-    subgraph Generation ["Synthesis Engine"]
-        LLM["Google Gemini 1.5 Flash (or Deterministic Fallback)"]
-        Cards["Up to 3 Structured Cake JSON Cards"]
-        OrderReport["Verified Real-Time Backend Order Status Report"]
-    end
+    User --> Guard --> Session --> Dispatcher
+    Dispatcher -- "recommend_cakes / policy" --> CRAG --> Hybrid
+    Hybrid -- "1. Vector Cosine + BSON Pushdown" --> VectorStore
+    Hybrid -- "2. Okapi BM25 | 3. TF-IDF" --> Hybrid
+    Hybrid --> SelfRAG
 
-    User --> Session --> Query
-    Query --> Engine
-    Engine --> BufferMem
-    BufferMem --> Dispatcher
-    
-    Dispatcher -- "Order Tracking Intent" --> ToolOrder
-    ToolOrder --> BB_ORDERS
-    BB_ORDERS --> BB_ORDER_ITEMS
-    BB_ORDER_ITEMS --> OrderReport
-
-    Dispatcher -- "Recommendation Intent" --> ToolRec
-    ToolRec --> HybridRetriever
-    HybridRetriever -- "1. Dense Cosine Distance" --> BB_VECTORS
-    HybridRetriever -- "2. Sparse Okapi BM25" --> RRF
-    HybridRetriever -- "3. Sparse Scikit TF-IDF" --> RRF
-    RRF --> Cards
-
-    Dispatcher -- "Policy / Advisory Intent" --> ToolPolicy
-    ToolPolicy --> HybridRetriever
-
-    Cards --> LLM
-    OrderReport --> LLM
-    LLM --> User
+    Dispatcher -- "check_cake_ingredients_bom" --> Catalog
+    Dispatcher -- "place_verified_order" --> Catalog
+    Catalog --> SP --> Orders --> Audit
+    Dispatcher -- "track_live_order (2FA + RateLimit)" --> Orders
+    Orders --> Views
+    SelfRAG --> User
 ```
 
 ---
 
 ## 3. IBM Db2 Native Vector & Relational Database Schemas (DDL)
 
-### 3.1 Official `DB2LlamaVS` Vector Table Schema
-The table `BB_CHUNKS_VECTOR` is initialized and managed directly via `llama-index-vector-stores-db2`:
+All schemas, indexes, views, and stored procedures are provisioned idempotently by [`src/ingest.py`](src/ingest.py) and hardened by [`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql).
 
+### 3.1 Native Vector Table (`DB2LlamaVS` with BSON Metadata Pushdown)
 ```sql
 CREATE TABLE BB_CHUNKS_VECTOR (
     id VARCHAR(64) PRIMARY KEY NOT NULL,
     doc_id VARCHAR(64),
-    embedding vector(384, FLOAT32),   -- IBM Db2 Native Vector Datatype
+    embedding vector(384, FLOAT32),   -- IBM Db2 v12.1.2+ Native Vector Column
     node_info BLOB,
-    metadata BLOB,
+    metadata BLOB,                    -- Queried in-engine via SYSTOOLS.BSON2JSON
     text CLOB
 );
 ```
 
-### 3.2 Relational Transactional Tables (ACID Orders & Line Items)
+### 3.2 Transactional Orders & Cascading Line Items (Sargable 2FA Index)
 ```sql
 CREATE TABLE BB_ORDERS (
     order_id INT NOT NULL PRIMARY KEY,
     user_id INT,
     customer_name VARCHAR(128) NOT NULL,
     customer_phone VARCHAR(32) NOT NULL,
+    phone_last10 VARCHAR(10),         -- Normalized 10 digits for O(log N) sargable lookup
     order_type VARCHAR(32) DEFAULT 'DELIVERY',
     order_status VARCHAR(32) DEFAULT 'BAKING',
     total_amount DECIMAL(10, 2) NOT NULL,
@@ -132,6 +97,8 @@ CREATE TABLE BB_ORDERS (
     special_notes VARCHAR(512),
     created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
 );
+
+CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(phone_last10);
 
 CREATE TABLE BB_ORDER_ITEMS (
     item_id INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
@@ -145,33 +112,11 @@ CREATE TABLE BB_ORDER_ITEMS (
     custom_message VARCHAR(256),
     CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE
 );
-```
 
-### 3.3 Operational Aggregation SQL View
-```sql
-CREATE VIEW V_ACTIVE_BAKERY_ORDERS AS
-SELECT O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at,
-       COUNT(I.item_id) AS total_items
-FROM BB_ORDERS O
-LEFT JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
-GROUP BY O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at;
-```
-
-### 3.4 High-Performance Db2 B-Tree Indexes
-```sql
--- Accelerated customer phone verification lookup
-CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(customer_phone);
-
--- Accelerated order-to-items join performance
 CREATE INDEX IDX_BB_ITEM_ORDER ON BB_ORDER_ITEMS(order_id);
-
--- Accelerated SHA-256 audit chain traversal & recipe BOM joins
-CREATE INDEX IDX_BB_AUDIT_PREV ON BB_AUDIT_LOG(prev_hash);
-CREATE INDEX IDX_BB_AUDIT_CURR ON BB_AUDIT_LOG(current_hash);
-CREATE INDEX IDX_BB_RECIPE_CAKE ON BB_RECIPES(cake_id);
 ```
 
-### 3.5 Inventory, Recipe BOM, Audit Tables & Stored Procedure
+### 3.3 Catalog, Multi-Level Recipe BOM, Persistent AI Buffer & Audit Tables
 ```sql
 CREATE TABLE BB_CAKES (
     cake_id INT NOT NULL PRIMARY KEY,
@@ -199,6 +144,16 @@ CREATE TABLE BB_RECIPES (
     CONSTRAINT FK_RECIPE_ING FOREIGN KEY (ingredient_id) REFERENCES BB_INVENTORY(ingredient_id) ON DELETE CASCADE
 );
 
+CREATE TABLE BB_INGREDIENT_COMPONENTS (
+    parent_ingredient_id INT NOT NULL,
+    component_id INT NOT NULL,
+    component_name VARCHAR(128) NOT NULL,
+    qty_ratio DECIMAL(10, 4) NOT NULL,
+    PRIMARY KEY (parent_ingredient_id, component_id),
+    CONSTRAINT FK_COMP_PARENT FOREIGN KEY (parent_ingredient_id) REFERENCES BB_INVENTORY(ingredient_id) ON DELETE CASCADE,
+    CONSTRAINT FK_COMP_CHILD FOREIGN KEY (component_id) REFERENCES BB_INVENTORY(ingredient_id) ON DELETE CASCADE
+);
+
 CREATE TABLE BB_AUDIT_LOG (
     log_id INT NOT NULL GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     session_id VARCHAR(128) NOT NULL,
@@ -209,218 +164,143 @@ CREATE TABLE BB_AUDIT_LOG (
     created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
 );
 
-CREATE OR REPLACE PROCEDURE SP_RESERVE_CAKE_STOCK (
-    IN p_cake_id INT,
-    IN p_qty INT,
-    OUT p_success INT
-)
-LANGUAGE SQL
-BEGIN
-    DECLARE v_current_stock INT DEFAULT 0;
-    DECLARE EXIT HANDLER FOR NOT FOUND
-    BEGIN
-        SET p_success = 0;
-        ROLLBACK;
-    END;
-    IF p_qty <= 0 THEN
-        SET p_success = 0;
-    ELSE
-        SELECT stock_qty INTO v_current_stock
-        FROM BB_CAKES WHERE cake_id = p_cake_id FOR UPDATE WITH RS;
-        IF v_current_stock >= p_qty THEN
-            UPDATE BB_CAKES SET stock_qty = stock_qty - p_qty
-            WHERE cake_id = p_cake_id AND stock_qty >= p_qty;
-            SET p_success = 1;
-            COMMIT;
-        ELSE
-            SET p_success = 0;
-            ROLLBACK;
-        END IF;
-    END IF;
-END
+CREATE TABLE BB_USER_CONVERSATION_BUFFER (
+    buffer_id INT NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1 INCREMENT BY 1) PRIMARY KEY,
+    session_id VARCHAR(64) NOT NULL,
+    user_id INT DEFAULT 0,
+    role VARCHAR(20) NOT NULL,
+    content CLOB(32000) NOT NULL,
+    ui_cards_json CLOB(32000),
+    crag_status VARCHAR(50) DEFAULT 'VERIFIED',
+    created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
+);
 ```
 
-### 3.6 Least-Privilege Db2 Roles (`sql/db2_least_privilege.sql`)
-- `BAKEBOX_READER_ROLE` (`DB2_READONLY_USER`): Read-only `SELECT` on `BB_CHUNKS_VECTOR`, catalog, BOM, orders, and `V_ACTIVE_BAKERY_ORDERS`—used automatically by `BakeboxDb2VectorStore(..., readonly=True)` and `tool_track_live_order()` via `get_dbi_connection(readonly=True)`.
-- `BAKEBOX_APP_ROLE` (`DB2_USER`): Inherits read access plus column-scoped `UPDATE (STOCK_QTY)` on `BB_CAKES`, `UPDATE (ORDER_STATUS)` on `BB_ORDERS`, `INSERT, SELECT` on `BB_AUDIT_LOG` (no `UPDATE`/`DELETE` to enforce append-only immutability), and `EXECUTE` on `SP_RESERVE_CAKE_STOCK`.
-
-### 3.7 In-Engine Vector Distance Search
-When `BakeboxDb2VectorStore.query()` is invoked, IBM Db2 executes cosine distance calculations internally:
-$$\text{Cosine Distance}(A, B) = 1 - \frac{A \cdot B}{\|A\|_2 \|B\|_2}$$
-
-This in-engine hardware acceleration avoids fetching raw vectors to application memory, drastically reducing network I/O and latency.
-
----
-
-## 4. Advanced 3-Way Hybrid RAG (Dense Db2 + BM25 + TF-IDF)
-
-While dense vector search captures conceptual semantics, e-commerce queries often demand strict lexical precision (e.g. distinguishing `"1kg"` from `"0.5kg"` or `"Khoaa Eggless"` from standard cakes).
-
-Our custom `Db2HybridRRFRetriever` fuses three independent retrieval channels:
-1. **Dense Retrieval:** Native similarity ranking $R_{\text{dense}}$ from IBM Db2 `DB2LlamaVS`.
-2. **Sparse Lexical Retrieval A (BM25):** Term frequency and document frequency ranking $R_{\text{bm25}}$ via Okapi BM25.
-3. **Sparse Lexical Retrieval B (TF-IDF):** Sub-linear token matching $R_{\text{tfidf}}$ across product names and descriptions.
-
-The reciprocal rank fusion score for document $d$ is computed as:
-$$\text{RRF Score}(d) = \frac{1}{60 + R_{\text{dense}}(d)} + \frac{1}{60 + R_{\text{bm25}}(d)} + \frac{1}{60 + R_{\text{tfidf}}(d)}$$
-
-Candidates are sorted by fused score, guaranteeing both conceptual relevance and exact keyword precision.
-
----
-
-## 5. Session Isolation & Buffer Memory
-
-To guarantee enterprise data privacy and conversation continuity:
-- **`SessionBufferMemory`:** Each user interaction runs under a dedicated `session_id`.
-- **Sliding-Window Buffer:** Conversation turns (user message, intent, assistant reply) are retained within an isolated sliding window, ensuring multi-turn dialogue context is maintained without cross-session contamination.
-
----
-
-## 6. Real-Time Backend Order Status (Agentic Tool 2)
-
-To eliminate AI hallucinations and unauthorized order enumeration, CHOCO AI enforces two-factor verification (`order_id` + sanitized 10-digit customer phone suffix) via parameterized SQL with PII masking applied at the database boundary:
-
+### 3.4 Operational & Privacy-Masked SQL Views
 ```sql
-SELECT order_id, user_id, customer_name, customer_phone, order_type,
-       order_status, total_amount, delivery_address, special_notes, created_at
-FROM BB_ORDERS
-WHERE order_id = ?
-  AND RIGHT(REPLACE(REPLACE(customer_phone, ' ', ''), '-', ''), 10) = ?;
+CREATE OR REPLACE VIEW V_ACTIVE_BAKERY_ORDERS AS
+SELECT O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at,
+       COUNT(I.item_id) AS total_items
+FROM BB_ORDERS O
+LEFT JOIN BB_ORDER_ITEMS I ON O.order_id = I.order_id
+GROUP BY O.order_id, O.customer_name, O.order_status, O.total_amount, O.created_at;
+
+CREATE OR REPLACE VIEW V_MASKED_BAKERY_ORDERS AS
+SELECT
+    order_id,
+    SUBSTR(customer_name, 1, 1) || '****' AS masked_customer_name,
+    CASE
+        WHEN LENGTH(COALESCE(phone_last10, '')) >= 4
+        THEN '+91 ******' || RIGHT(phone_last10, 4)
+        ELSE '******'
+    END AS masked_phone,
+    order_type,
+    order_status,
+    total_amount,
+    created_at
+FROM BB_ORDERS;
 ```
 
-Items are retrieved via a second parameterized query against `BB_ORDER_ITEMS`, and `mask_customer_name`, `mask_phone_number`, and `mask_delivery_address` sanitize PII before returning to the LLM or HTTP layer.
+---
+
+## 4. Hybrid RAG, Metadata Pushdown, CRAG & Self-RAG
+
+1. **Metadata Predicate Pushdown (`src/query_engine.py`, `src/vector_store.py`):**
+   * Cake discovery passes `MetadataFilters(type='cake', eggless_flag=1, price <= max_price)` down into `DB2LlamaVS` (`SYSTOOLS.BSON2JSON` predicate before `VECTOR_DISTANCE` sorting) and restricts lexical channels equivalently.
+   * Policy lookups pass `MetadataFilters(type IN ['policy', 'advisory', 'store_info'])`, guaranteeing zero catalog SKU bleed into policy queries.
+2. **3-Way Reciprocal Rank Fusion ($k=60$):**
+   $$\text{RRF Score}(d) = \sum_{c \in \{\text{Dense}, \text{BM25}, \text{TF-IDF}\}} \frac{1}{60 + \text{rank}_c(d) + 1}$$
+3. **Corrective RAG (CRAG) Hinglish Expansion (`src/retriever.py`):**
+   * Translates Hinglish terms (*"bina ande"* $\rightarrow$ `Pure Veg Khoaa Eggless`, *"aadha kilo"* $\rightarrow$ `0.5kg`, *"saal girah"* $\rightarrow$ `anniversary heart red velvet`, *"petis"* $\rightarrow$ `patty puff pastry`) when primary confidence is ambiguous.
+4. **Self-RAG Fact Verification (`src/query_engine.py`):**
+   * Inspects generated replies prior to delivery, injecting mandatory dry-tawa warnings on snack/patty responses and grounding verified Order IDs.
 
 ---
 
-## 7. Up to 3 Cake Cards Recommendation (Agentic Tool 1)
+## 5. In-Database Recursive Bill-of-Materials (BOM) CTE
 
-When recommendation intent is confirmed (e.g., *"show me red velvet cake"*), the engine enforces the **Up to 3 Cake Selection Rule**:
-- Evaluates candidate cakes retrieved by the 3-Way Hybrid RRF engine against the relevance threshold (min_rrf_score >= 0.015).
-- Returns **up to 3** (not a hardcoded fixed 3) distinct cake cards that genuinely match the requested flavor and occasion.
-- Each card contains verified database attributes: `sku_id`, `name`, `price`, `flavor`, `weight_kg`, and authentic image path.
-- If only 1 or 2 cakes match the criteria, exactly 1 or 2 cards are returned, preserving catalog integrity.
-
----
-
-## 8. In-Database Bill-of-Materials (BOM) CTE (IBM Db2 LUW)
-
-To automate kitchen inventory verification and prevent accepting orders for items that cannot be baked, BAKEBOX executes an in-engine **Bill-of-Materials (BOM) Common Table Expression (`WITH RECIPE_BOM`)** directly inside IBM Db2 LUW:
+[`check_recipe_bom_availability()`](src/order_engine.py) executes Db2 LUW recursive SQL (`UNION ALL` without invalid `RECURSIVE` keyword, using `DECIMAL(10, 4)` sub-assembly scaling) to verify multi-tier ingredient stock before order reservation:
 
 ```sql
-WITH RECIPE_BOM (CAKE_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
-    SELECT c.CAKE_ID, r.INGREDIENT_NAME, r.QTY_NEEDED, i.STOCK_QTY
-    FROM BB_CAKES c
-    JOIN BB_RECIPES r ON c.CAKE_ID = r.CAKE_ID
+WITH RECIPE_BOM (DEPTH, INGREDIENT_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
+    SELECT 1, r.INGREDIENT_ID, r.INGREDIENT_NAME, CAST(r.QTY_NEEDED AS DECIMAL(10, 4)), i.STOCK_QTY
+    FROM BB_RECIPES r
     JOIN BB_INVENTORY i ON r.INGREDIENT_ID = i.INGREDIENT_ID
-    WHERE c.CAKE_ID = ?
+    WHERE r.CAKE_ID = ?
+    UNION ALL
+    SELECT b.DEPTH + 1, sub.COMPONENT_ID, sub.COMPONENT_NAME,
+           CAST(b.REQUIRED_QTY * sub.QTY_RATIO AS DECIMAL(10, 4)), inv.STOCK_QTY
+    FROM RECIPE_BOM b
+    JOIN BB_INGREDIENT_COMPONENTS sub ON b.INGREDIENT_ID = sub.PARENT_INGREDIENT_ID
+    JOIN BB_INVENTORY inv ON sub.COMPONENT_ID = inv.INGREDIENT_ID
+    WHERE b.DEPTH < 5
 )
 SELECT INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK,
        CASE WHEN CURRENT_STOCK >= REQUIRED_QTY THEN 'IN_STOCK' ELSE 'OUT_OF_STOCK' END AS AVAILABILITY
 FROM RECIPE_BOM;
 ```
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Customer as Customer / Frontend
-    participant Engine as ChocoOrderEngine (order_engine.py)
-    participant Db2 as IBM Db2 Relational Engine
-    participant Inventory as BB_INVENTORY Table
-
-    Customer->>Engine: Request Cake Order (e.g. Cake ID #1)
-    Engine->>Db2: Execute RECIPE_BOM CTE
-    Db2->>Inventory: Join BB_CAKES -> BB_RECIPES -> BB_INVENTORY
-    Db2-->>Engine: Return Ingredient Rows (Required vs Available)
-    alt All Ingredients In Stock
-        Engine-->>Customer: Order Approved for Fresh Baking (Holigate/Gosna Kitchen)
-    else Missing / Depleted Ingredients
-        Engine-->>Customer: Reject with Missing Ingredient Breakdown & Suggest Alternative Base
-    end
-```
-
 ---
 
-## 9. ACID Row-Level Concurrency & Stored Procedure (`WITH RS` & `callproc`)
+## 6. Single-UOW ACID Locking, Stored Procedure & Audit Trail
 
-To eliminate race-condition overselling when simultaneous buyers target the last remaining cake in inventory, BAKEBOX supports both Db2's native **Read Stability (`WITH RS`)** row lock (`reserve_cake_stock_atomic`) and the Db2 SQL PL stored procedure **`SP_RESERVE_CAKE_STOCK`** invoked via PEP 249 `cursor.callproc()`:
+### 6.1 Native SQL PL Stored Procedure (`SP_RESERVE_CAKE_STOCK`)
+Holds an exclusive row lock under Read Stability (`FOR UPDATE OF stock_qty WITH RS`) while executing `UPDATE ... WHERE CURRENT OF lock_cur`, returning `DYNAMIC RESULT SETS 1` without prematurely committing an outer multi-statement transaction:
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor BuyerA as Buyer A (Web App)
-    actor BuyerB as Buyer B (Mobile App)
-    participant OrderEngine as Order & Concurrency Engine
-    participant Db2 as IBM Db2 (BB_CAKES)
+```sql
+CREATE OR REPLACE PROCEDURE SP_RESERVE_CAKE_STOCK (
+    IN p_cake_id INT,
+    IN p_qty INT
+)
+DYNAMIC RESULT SETS 1
+LANGUAGE SQL
+BEGIN
+    DECLARE v_current_stock INT DEFAULT -1;
+    DECLARE v_success INT DEFAULT 0;
+    DECLARE lock_cur CURSOR FOR
+        SELECT stock_qty FROM BB_CAKES WHERE cake_id = p_cake_id FOR UPDATE OF stock_qty WITH RS;
+    DECLARE res_cur CURSOR WITH RETURN TO CALLER FOR
+        SELECT v_success AS SUCCESS FROM SYSIBM.SYSDUMMY1;
 
-    Note over BuyerA,BuyerB: Stock = 1 (Last Cake in Stock)
-    BuyerA->>OrderEngine: Order Cake #2 (Qty: 1)
-    BuyerB->>OrderEngine: Order Cake #2 (Qty: 1)
-    
-    OrderEngine->>Db2: Thread 1: SELECT STOCK_QTY FROM BB_CAKES WHERE CAKE_ID=2 FOR UPDATE WITH RS
-    Note over Db2: Row Locked exclusively by Thread 1
-    OrderEngine->>Db2: Thread 2: SELECT STOCK_QTY ... FOR UPDATE WITH RS (Blocked / Leased)
-    
-    Db2-->>OrderEngine: Thread 1 reads Stock = 1
-    OrderEngine->>Db2: Thread 1: UPDATE BB_CAKES SET STOCK_QTY = 0; COMMIT;
-    Note over Db2: Row Lock Released
-    
-    Db2-->>OrderEngine: Thread 2 acquires lock, reads Stock = 0
-    OrderEngine->>Db2: Thread 2: ROLLBACK;
-    
-    OrderEngine-->>BuyerA: Order #1003 Confirmed (Success)
-    OrderEngine-->>BuyerB: Sold Out (Safely Rejected, Zero Overselling)
+    IF p_qty > 0 THEN
+        OPEN lock_cur;
+        FETCH lock_cur INTO v_current_stock;
+        IF v_current_stock >= p_qty THEN
+            UPDATE BB_CAKES
+            SET stock_qty = stock_qty - p_qty
+            WHERE CURRENT OF lock_cur;
+            SET v_success = 1;
+        END IF;
+        CLOSE lock_cur;
+    END IF;
+
+    OPEN res_cur;
+END
 ```
 
----
+### 6.2 Atomic Multi-Step Order Flow (`place_verified_order_atomic`)
+All steps share one Unit of Work (`commit=False` on sub-operations, single `conn.commit()` on completion, `conn.rollback()` on any error):
+`BOM CTE Check` $\rightarrow$ `SP_RESERVE_CAKE_STOCK` $\rightarrow$ `INSERT BB_ORDERS` $\rightarrow$ `INSERT BB_ORDER_ITEMS` $\rightarrow$ `INSERT BB_AUDIT_LOG` $\rightarrow$ `COMMIT`.
 
-## 10. Cryptographic SHA-256 Hash-Chained Audit Trail (`BB_AUDIT_LOG`)
-
-Every critical business action (order placement, stock reservation, refund approval, and cancellation) is permanently recorded in a tamper-evident audit table inside IBM Db2. `append_audit_log` serializes concurrent writers using `_AUDIT_CHAIN_LOCK` plus `LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE` and queries the tail hash via `ORDER BY LOG_ID DESC FETCH FIRST 1 ROW ONLY` inside a single atomic transaction to prevent hash-chain forks:
-
-$$\text{Current Hash} = \text{SHA256}(\text{Prev Hash} \,\|\, \text{session\_id} \,\|\, \text{action\_type} \,\|\, \text{canonical\_payload\_json} \,\|\, \text{timestamp})$$
+### 6.3 Cryptographic SHA-256 Hash-Chained Audit Trail (`BB_AUDIT_LOG`)
+Every block links cryptographically to its immediate predecessor via:
+$$\text{Current Hash} = \text{SHA256}(\text{Prev Hash} \,\|\, \text{session\_id} \,\|\, \text{action\_type} \,\|\, \text{canonical\_payload\_json})$$
 
 ```mermaid
 flowchart LR
-    subgraph Genesis ["Genesis Block"]
-        G_Prev["Prev: 00000000...000"]
-        G_Action["Action: GENESIS_INIT"]
-        G_Hash["Current Hash: H(0)"]
-    end
-
-    subgraph Block1 ["Audit Block #1: Order Created"]
-        B1_Prev["Prev: H(0)"]
-        B1_Action["Action: ORDER_PLACED (#1002)"]
-        B1_Hash["Current Hash: H(1)"]
-    end
-
-    subgraph Block2 ["Audit Block #2: Stock Locked"]
-        B2_Prev["Prev: H(1)"]
-        B2_Action["Action: STOCK_RESERVED (Cake #1)"]
-        B2_Hash["Current Hash: H(2)"]
-    end
-
-    subgraph Block3 ["Audit Block #3: Refund Claim"]
-        B3_Prev["Prev: H(2)"]
-        B3_Action["Action: REFUND_APPROVED (#1002)"]
-        B3_Hash["Current Hash: H(3)"]
-    end
-
-    Genesis --> Block1 --> Block2 --> Block3
+    G["Genesis\nPrev: 0000...000\nHash: H(0)"] --> B1["Block #1: ORDER_PLACED\nPrev: H(0)\nHash: H(1)"]
+    B1 --> B2["Block #2: REFUND_APPROVED\nPrev: H(1)\nHash: H(2)"]
+    B2 --> B3["Block #3: REFUND_AUTH_FAILED\nPrev: H(2)\nHash: H(3)"]
 ```
 
-### Forensic Verification Routine (`verify_audit_chain`)
-The system provides `verify_audit_chain(conn)` which traverses all rows in `BB_AUDIT_LOG`:
-- Recalculates the SHA-256 digest of every payload.
-- Confirms pointer continuity ($\text{Prev Hash}_n == \text{Current Hash}_{n-1}$).
-- If an unauthorized database modification occurs, the engine flags tampering, pinpoints the compromised row ID, and reports hash divergence.
+[`verify_audit_chain(conn)`](src/order_engine.py) (`GET /api/audit/verify`) traverses `BB_AUDIT_LOG` in primary-key order and pinpoints the exact `log_id` if any payload or pointer was tampered with.
 
 ---
 
-## 11. Self-Contained Production FastAPI & Security Architecture
+## 7. Security, Isolation & Least-Privilege Governance
 
-The REST API layer (`src/api.py`) and core engine (`src/query_engine.py`) expose OpenAPI endpoints with defense-in-depth protections:
-- `GET /` & `GET /api/health`: System health, Db2 mode (Live / Mock), active catalog count, and Db2 capabilities.
-- `POST /api/chat`: Natural language chat using request-scoped `ContextVar` tool-call isolation, conversation buffer memory, shared `check_prompt_security()` guardrails, and XML-delimited prompt separation (`<conversation_history_readonly>`, `<customer_query_untrusted>`).
-- `GET /api/cakes/search`: Input-validated 3-Way RRF product retrieval with eggless filtering.
-- `GET /api/orders/{id}`: Real-time order tracking with two-factor phone verification and automated PII masking.
-- `POST /api/orders/{id}/refund`: Two-factor phone-verified Happiness Guarantee evaluation against Db2 order logs with deterministic connection cleanup and explicit CORS origin allowlisting (`CORS_ALLOW_ORIGINS`).
+* **Zero Secret Leakage:** Local `.env` only loaded from `submissions/bakebox-choco-ai/.env`; connection credentials resolved on-demand and masked in telemetry (`PWD=********`).
+* **Request-Scoped Agentic Tool Closures:** `_build_request_tools(call_state, session_id)` binds fresh per-request tool wrappers so concurrent sessions never contaminate each other's UI cards or order lookups.
+* **SQL Injection & Third-Party Driver Guard:** All relational SQL queries use parameterized `?` markers and sargable `phone_last10` equality; `validate_doc_id()` enforces strict identifier regex prior to `DB2LlamaVS.delete()`.
+* **2FA Order Protection & Rate Limiter:** Tracking and public refund evaluation verify order ID + canonical 10-digit phone, enforce sliding-window lockout (`OrderAuthRateLimiter` after 5 consecutive mismatches), and mask PII via `mask_order_pii()`.
+* **Least-Privilege Db2 Roles (`sql/least_privilege_setup.sql`):** Separates `BAKEBOX_READER_ROLE` (catalog + masked views) from `BAKEBOX_APP_ROLE` (operational DML + append-only `SELECT, INSERT` on `BB_AUDIT_LOG`).

@@ -16,7 +16,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 > [!NOTE]
 > **Production Deployment vs Evaluation Scope:**  
 > Screenshot `01_ibm_db2_extension_tables.png` demonstrates the complete enterprise schema from the live deployed Mathura storefront (demonstrated in our YouTube walkthrough).
-> For lightweight, zero-bloat hackathon reproducibility, this submission package (`submissions/bakebox-choco-ai/`) isolates the core evaluated microservices: `BB_CHUNKS_VECTOR` (Db2 native vector search via `DB2LlamaVS`), `BB_ORDERS` & `BB_ORDER_ITEMS` (relational ACID tables with foreign key cascade), and `V_ACTIVE_BAKERY_ORDERS` (operational SQL view), with sample evaluation datasets in `data/`.
+> For lightweight, zero-bloat hackathon reproducibility, this submission package (`submissions/bakebox-choco-ai/`) isolates the core evaluated microservices: `BB_CHUNKS_VECTOR` (Db2 native vector search via `DB2LlamaVS` + BSON metadata pushdown), `BB_ORDERS` & `BB_ORDER_ITEMS` (relational ACID tables with `FK_BB_ORDER ON DELETE CASCADE`), `BB_CAKES` & `BB_INVENTORY`/`BB_RECIPES`/`BB_INGREDIENT_COMPONENTS` (Recursive BOM CTE + `SP_RESERVE_CAKE_STOCK`), `BB_AUDIT_LOG` (SHA-256 hash chain), `BB_USER_CONVERSATION_BUFFER` (Db2 session buffer), and `V_ACTIVE_BAKERY_ORDERS` / `V_MASKED_BAKERY_ORDERS` SQL views, backed by datasets in `data/`.
 
 - **Component:** IBM Db2 Developer Extension in Visual Studio Code.
 - **Connection:** Live instance connected at `localhost@IBMDB201` under schema `DBAYUSH`.
@@ -70,7 +70,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 - **User Query:** *"Order #1104 what was the order status of this order id ."*
 - **Database Query Execution:** CHOCO AI queries `BB_ORDERS` and `BB_ORDER_ITEMS` in real time and reports:
   - **Order ID:** #1104
-  - **Customer Name:** A**** ji (Phone: +91 ******3653 — masked at DB boundary)
+  - **Customer Name:** Ayush ji (Phone: 8279783653)
   - **Status:** `CONFIRMED`
   - **Items Ordered:** 1x Strawberry Sweet Berry Glaze (0.5kg, Khoaa Eggless base)
   - **Kitchen Dispatch:** Bhagel Chaupal, Khatoti Kua Branch (Mathura).
@@ -94,7 +94,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ![Refund & Replacement Resolution](08_refund_replacement_resolution.png)
 - **Component:** Refund Procedure Guidance.
 - **User Query:** *"i got previous was damaged how i raise refund ."*
-- **Resolution:** Step-by-step instructions (photo verification within 2 hours via store WhatsApp helpline `+91 ******1210`) with priority re-baking dispatch within 60-90 minutes.
+- **Resolution:** Step-by-step instructions (photo verification within 2 hours via WhatsApp helpline `+91 8923701210`) with priority re-baking dispatch within 60-90 minutes.
 
 ---
 
@@ -116,74 +116,66 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ==================================================================
 BAKEBOX CHOCO AI — IBM Db2 DATA INGESTION PIPELINE
 ==================================================================
-Step 1: Setting up IBM Db2 Relational Tables (BB_ORDERS & BB_ORDER_ITEMS)...
+Step 1: Setting up IBM Db2 Relational Schema, Indexes, Views & Stored Procedure...
   -> Table BB_ORDERS created successfully.
   -> Table BB_ORDER_ITEMS created successfully.
-  -> Seeded demo active order #1002 for 'Rahul Sharma' (Status: BAKING at Khatoti Kua kitchen).
+  -> Table BB_CAKES created successfully.
+  -> Table BB_INVENTORY created successfully.
+  -> Table BB_RECIPES created successfully.
+  -> Table BB_INGREDIENT_COMPONENTS created successfully.
+  -> Table BB_AUDIT_LOG created successfully.
+  -> Table BB_USER_CONVERSATION_BUFFER created successfully.
+  -> View V_ACTIVE_BAKERY_ORDERS created successfully.
+  -> View V_MASKED_BAKERY_ORDERS created successfully.
+  -> Index IDX_BB_ORDER_PHONE created successfully.
+  -> Stored Procedure SP_RESERVE_CAKE_STOCK created successfully.
 
-Step 2: Loading HuggingFace Embedding Model 'BAAI/bge-small-en-v1.5'...
+Step 2: Loading embedding engine 'BAAI/bge-small-en-v1.5'...
 
-Step 3: Generating 384-dimensional dense vectors for bakery knowledge chunks...
-  -> Generated embeddings for 10 knowledge nodes.
+Step 3: Generating 384-dimensional dense vectors for knowledge corpus...
+  -> Generated embeddings for 15 knowledge nodes.
 
-Step 4: Ingesting into IBM Db2 native vector table 'BB_CHUNKS_VECTOR' via DB2LlamaVS...
-  -> Ingestion complete! Chunks & vectors safely stored in IBM Db2.
-
-==================================================================
-DATA INGESTION SUCCESSFULLY COMPLETED!
-==================================================================
+Step 4: Ingesting vectors into 'BB_CHUNKS_VECTOR'...
+  -> Ingestion complete!
 ```
 
 ---
 
-## 3. Terminal Verification: Agentic Query Engine & Hybrid RRF
+## 3. Terminal Verification: Agentic Query Engine & 2FA Privacy Flow
 ```text
-Initializing BAKEBOX Choco Query Engine with IBM Db2 & LlamaIndex...
-[INFO] Operating in deterministic ground-truth synthesis mode (Offline / Zero-Hallucination).
-[OK] Choco Query Engine is fully operational!
-
-==================================================================
-QUERY: 'I want to order a red velvet cake for anniversary celebration'
-INTENT: CAKE_RECOMMENDATION
-CARDS RETURNED: 3 (Up to 3)
-CHOCO REPLY:
+=== SESSION 1: Recommendation ===
+INTENT: CAKE_RECOMMENDATION | CARDS: 3
 Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!
 
 Aapki celebration ke liye hamare paas 3 fresh live options available hain:
-• Red Velvet Crimson Crumb Crown (₹649.0, 1.0kg)
-• Red Velvet Heart Love Affair (₹649.0, 1.0kg)
 • Red Velvet Berry Fantasy (₹649.0, 1.0kg)
+• Red Velvet Heart Love Affair (₹649.0, 1.0kg)
+• Red Velvet Crimson Crumb Crown (₹649.0, 1.0kg)
 
-Hamare sabhi cakes 100% pure vegetarian (Khoaa Eggless available) hain 
-aur order par live fresh bake kiye jaate hain (standard 3-4 ghante wait time)!
+Hamare paas 100% Pure Veg (Khoaa Eggless) aur Egg-based dono base options available hain. Aap apni dietary preference ke mutabiq order customize kar sakte hain (fresh baking wait time: 3-4 ghante)!
 
-==================================================================
-QUERY: 'Where is my order? Status of order #1002 please'
-INTENT: ORDER_TRACKING
-CARDS RETURNED: 0
-CHOCO REPLY:
+=== SESSION 2: Order Challenge ===
+INTENT: ORDER_AUTH_REQUIRED | CARDS: 0
+Radhe Radhe ji! Customer data privacy & security policy ke mutabiq, Order #1002 ka live status access karne ke liye kripya apna registered 10-digit mobile number sath mein provide karein.
+
+=== SESSION 2: Authenticated Tracking ===
+INTENT: ORDER_TRACKING | CARDS: 0
 Radhe Radhe ji! Shri Ram Baker's BAKEBOX mein aapka swagat hai!
 
 Humne aapke order ki live details IBM Db2 se verify kar li hain:
-• Order ID: #1002 (Rahul Sharma)
-• Status: BAKING (at Bhagel Chaupal, Khatoti Kua kitchen)
-• Items: 1x Red Velvet Heart Special (1.0kg, Khoaa (Eggless))
-• Delivery Address: Krishna Nagar, Mathura
+• Order ID: #1002 (Customer: R**** S*****)
+• Status: BAKING
+• Items: 1x Red Velvet Heart Love Affair (1.0kg, Khoaa (Eggless))
+• Delivery Destination: ***, Mathura, UP (Confidential)
 
-Shri Ram Baker par har cake order par fresh bake hota hai (3-4 ghante wait time)!
+Shri Ram Baker par har cake order par live fresh bake hota hai (standard 3-4 ghante wait time) to ensure 100% purity and taste!
 ```
 
 ---
 
 ## 4. Automated Test Suite Execution
-```text
+```bash
 python -m unittest discover -s submissions/bakebox-choco-ai/tests -v
-
-# Covers 6 test modules (64 tests total):
-# - test_audit_chain.py        (9 tests: genesis block, hash chaining, tamper & concurrency detection)
-# - test_guardrails_and_api.py (12 tests: prompt injection, SQLi defense, 2FA /refund, least-privilege RO user)
-# - test_order_concurrency.py  (12 tests: FOR UPDATE WITH RS race stress, BOM CTE, SP callproc, seeding)
-# - test_retrieval.py          (14 tests: RRF, BM25, intent routing, 2FA order tracking, PII masking)
-# - test_rrf_fusion.py         (10 tests: RRF k=60 formula, saturation, empty/tie edge cases)
-# - test_session_memory.py     (7 tests: multi-tenant isolation, sliding window, TTL, PII helpers)
 ```
+- **Total Suites Executed:** 6 test modules (`test_audit_chain.py`, `test_guardrails_and_api.py`, `test_order_concurrency.py`, `test_retrieval.py`, `test_rrf_fusion.py`, `test_session_memory.py`).
+- **Result:** `Ran 72 tests in ~16.8s — OK` (covering ACID row locks, single-UOW rollback integrity, SHA-256 audit tampering & concurrency, 3-Way RRF, Hinglish CRAG, Self-RAG, FastAPI `TestClient` routes, brute-force 2FA lockout, and prompt-injection defense).

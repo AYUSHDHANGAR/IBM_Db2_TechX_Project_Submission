@@ -4,9 +4,9 @@ Tests for Cryptographic SHA-256 Hash-Chained Audit Trail (BB_AUDIT_LOG).
 Verifies genesis state, sequential hash continuity, mathematical integrity verification,
 and forensic detection of malicious data tampering.
 """
+import json
 import os
 import sys
-import json
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
@@ -110,13 +110,12 @@ class TestAuditChain(unittest.TestCase):
         self.assertTrue(is_valid)
 
     def test_09_concurrent_audit_chain_integrity(self):
-        """Concurrent threads appending audit blocks must never fork or break the SHA-256 chain."""
+        """16 concurrent threads appending audit blocks must never fork the SHA-256 chain."""
         def worker(idx: int):
             return append_audit_log(self.conn, f"sess_{idx}", "CONCURRENT_OP", {"seq": idx})
 
         with ThreadPoolExecutor(max_workers=8) as executor:
-            futures = [executor.submit(worker, i) for i in range(16)]
-            for f in futures:
+            for f in [executor.submit(worker, i) for i in range(16)]:
                 f.result()
 
         self.assertEqual(len(self.conn.tables["BB_AUDIT_LOG"]), 16)

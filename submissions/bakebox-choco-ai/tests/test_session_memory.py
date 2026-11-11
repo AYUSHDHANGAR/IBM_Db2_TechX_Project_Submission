@@ -92,6 +92,30 @@ class TestSessionMemoryAndIsolation(unittest.TestCase):
         self.assertNotIn("Flat 402", masked)
         self.assertIn("Confidential", masked)
 
+    def test_08_concurrent_session_query_isolation(self):
+        """Concurrent threads executing queries on separate sessions never cross-contaminate results."""
+        from concurrent.futures import ThreadPoolExecutor
+
+        def run_a():
+            return self.engine.query("Show me red velvet cake", session_id="concurrent_user_A")
+
+        def run_b():
+            return self.engine.query("Check status of order #1002 phone +91 9876543210", session_id="concurrent_user_B")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            fa = pool.submit(run_a)
+            fb = pool.submit(run_b)
+            res_a = fa.result()
+            res_b = fb.result()
+
+        self.assertEqual(res_a["intent"], "CAKE_RECOMMENDATION")
+        self.assertEqual(res_a["session_id"], "concurrent_user_A")
+        self.assertTrue(len(res_a["ui_cards"]) > 0)
+
+        self.assertEqual(res_b["intent"], "ORDER_TRACKING")
+        self.assertEqual(res_b["session_id"], "concurrent_user_B")
+        self.assertEqual(res_b["ui_cards"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
