@@ -224,6 +224,103 @@ class TestGuardrailsAndAPI(unittest.TestCase):
             bad_chat = client.post("/api/chat", json={"session_id": "bad;id", "message": "hi"})
             self.assertEqual(bad_chat.status_code, 422)
 
+    def test_18_gemini_15_flash_agentic_tools_schema_and_dispatch(self):
+        """Verify Gemini 1.5 Flash runtime resolution, google-genai tool schemas (5 tools), and request-scoped dispatch."""
+        import src.query_engine as qe
+        from unittest.mock import patch
+
+        conn = get_dbi_connection()
+        if hasattr(conn, "reset_state"):
+            conn.reset_state()
+        order_auth_limiter.reset()
+
+        prev_key = os.environ.get("GEMINI_API_KEY")
+        prev_model = os.environ.get("GEMINI_MODEL")
+        os.environ["GEMINI_API_KEY"] = "test-gemini-key-offline"
+        os.environ["GEMINI_MODEL"] = "gemini-1.5-flash"
+        try:
+            rt = qe._resolve_gemini_runtime()
+            self.assertEqual(rt["model_name"], "gemini-1.5-flash")
+            self.assertIsNotNone(rt["mode"])
+
+            engine = qe.ChocoQueryEngine(use_llm=True)
+            self.assertTrue(engine.use_llm)
+
+            call_state = {}
+            tools = engine._build_request_tools(call_state, session_id="gemini_schema_sess")
+            self.assertEqual(
+                [fn.__name__ for fn in tools],
+                [
+                    "recommend_cakes",
+                    "track_live_order",
+                    "get_store_policy_or_advisory",
+                    "check_cake_ingredients_bom",
+                    "place_verified_order",
+                ],
+            )
+
+            if rt["mode"] == "google-genai" and rt["client"] is not None and rt["types"] is not None:
+                for fn in tools:
+                    decl = rt["types"].FunctionDeclaration.from_callable(client=rt["client"], callable=fn)
+                    self.assertEqual(decl.name, fn.__name__)
+                    self.assertIsNotNone(decl.parameters)
+
+            def fake_gemini_dispatch(prompt_payload: str, req_tools: list) -> str:
+                self.assertIn("<customer_input>", prompt_payload)
+                tool_map = {fn.__name__: fn for fn in req_tools}
+                cards = tool_map["recommend_cakes"]("eggless red velvet", eggless_only=True, limit=2)
+                bom = tool_map["check_cake_ingredients_bom"](1)
+                policy = tool_map["get_store_policy_or_advisory"]("patty reheat")
+                tracked = tool_map["track_live_order"](1002, "9876543210")
+                placed = tool_map["place_verified_order"](1, "Priya Verma", "+91 9811122233", 1, "Khoaa (Eggless)")
+                self.assertGreaterEqual(len(cards), 1)
+                self.assertTrue(all(c["is_eggless_available"] for c in cards))
+                self.assertIn("bom_tree", bom)
+                self.assertIsInstance(bom["bakeable"], bool)
+                self.assertGreaterEqual(len(policy), 1)
+                self.assertEqual(tracked["ORDER_ID"], 1002)
+                self.assertTrue(placed["success"])
+                return "Radhe Radhe ji! Gemini 1.5 Flash verified cake stock via BOM and placed your order."
+
+            with patch.object(engine, "_invoke_gemini_with_tools", side_effect=fake_gemini_dispatch):
+                res = engine.query(
+                    "Find eggless cake, check BOM, patty advisory, track #1002 and place order",
+                    session_id="gemini_tool_e2e",
+                )
+
+            self.assertEqual(res["intent"], "ORDER_PLACED")
+            self.assertEqual(
+                res["tools_called"],
+                [
+                    "recommend_cakes",
+                    "check_cake_ingredients_bom",
+                    "get_store_policy_or_advisory",
+                    "track_live_order",
+                    "place_verified_order",
+                ],
+            )
+            self.assertGreaterEqual(len(res["ui_cards"]), 1)
+            self.assertEqual(res["order_details"]["ORDER_ID"], 1002)
+            self.assertTrue(res["placed_order"]["success"])
+            self.assertIn("VERIFIED DB2 ORDER #1002: BAKING", res["reply"].upper())
+
+            # Second isolated query ensures previous request's tools/cards do not leak across calls
+            with patch.object(engine, "_invoke_gemini_with_tools", return_value="Radhe Radhe ji! Namaste!"):
+                res2 = engine.query("Hello", session_id="gemini_tool_clean")
+            self.assertEqual(res2["ui_cards"], [])
+            self.assertEqual(res2["tools_called"], [])
+            self.assertIsNone(res2["placed_order"])
+        finally:
+            qe._CLIENT_CACHE.pop("test-gemini-key-offline", None)
+            if prev_key is None:
+                os.environ.pop("GEMINI_API_KEY", None)
+            else:
+                os.environ["GEMINI_API_KEY"] = prev_key
+            if prev_model is None:
+                os.environ.pop("GEMINI_MODEL", None)
+            else:
+                os.environ["GEMINI_MODEL"] = prev_model
+
 
 if __name__ == "__main__":
     unittest.main()

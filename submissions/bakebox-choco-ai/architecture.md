@@ -4,7 +4,7 @@
 **Event:** IBM Db2 TechX Summit 2026 · GL Bajaj Group of Institutions, Mathura (Db2Hack Dev Hacks)  
 **Project Slug:** `submissions/bakebox-choco-ai`  
 **Developer:** Ayush Dhangar ([@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR)) · BTech CSE-AIML, 4th Year · AI Systems & Db2 Solutions Architect  
-**Core Stack:** IBM Db2 LUW 12.1 (`ibm_db`, `ibm_db_dbi`), LlamaIndex (`llama-index-vector-stores-db2` / `DB2LlamaVS`), Scikit-Learn, FastEmbed (`BAAI/bge-small-en-v1.5`), Google Gemini (`google-genai`), FastAPI
+**Core Stack:** IBM Db2 LUW 12.1 (`ibm_db`, `ibm_db_dbi`), LlamaIndex (`llama-index-vector-stores-db2` / `DB2LlamaVS`), Scikit-Learn, FastEmbed (`BAAI/bge-small-en-v1.5`), Google Gemini 1.5 Flash (`gemini-1.5-flash` via `google-genai`), FastAPI
 
 ---
 
@@ -36,7 +36,7 @@ flowchart TD
 
     subgraph AI_Layer ["Agentic AI & Hybrid RAG (src/query_engine.py & src/retriever.py)"]
         CRAG["Hinglish CRAG Query Expander\n('bina ande' -> Pure Veg Khoaa Eggless)"]
-        Dispatcher["Request-Scoped Agentic Dispatcher\n(google-genai Tools / Deterministic Fallback)"]
+        Dispatcher["Request-Scoped Agentic Dispatcher\n(Gemini 1.5 Flash / Deterministic Fallback)"]
         Hybrid["Db2HybridRRFRetriever\n3-Way Reciprocal Rank Fusion (k=60)"]
         SelfRAG["Self-RAG Fact Verifier & Output Scrubber\n(Tawa Rule + Secret Redaction)"]
     end
@@ -205,6 +205,9 @@ FROM BB_ORDERS;
 
 ## 4. Hybrid RAG, Metadata Pushdown, CRAG & Self-RAG
 
+0. **Gemini 1.5 Flash (`gemini-1.5-flash`) & 5 Request-Scoped Agentic Tools (`src/query_engine.py`):**
+   * `_resolve_gemini_runtime()` dynamically resolves `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-1.5-flash` via the official `google-genai` SDK (`AutomaticFunctionCallingConfig`), falling back seamlessly to offline deterministic routing when `--no-llm` or placeholder keys are active.
+   * `_build_request_tools(call_state, session_id)` binds 5 fresh per-request tool callables so concurrent sessions remain strictly isolated: `recommend_cakes`, `track_live_order`, `get_store_policy_or_advisory`, `check_cake_ingredients_bom`, and `place_verified_order`.
 1. **Metadata Predicate Pushdown (`src/query_engine.py`, `src/vector_store.py`):**
    * Cake discovery passes `MetadataFilters(type='cake', eggless_flag=1, price <= max_price)` down into `DB2LlamaVS` (`SYSTOOLS.BSON2JSON` predicate before `VECTOR_DISTANCE` sorting) and restricts lexical channels equivalently.
    * Policy lookups pass `MetadataFilters(type IN ['policy', 'advisory', 'store_info'])`, guaranteeing zero catalog SKU bleed into policy queries.

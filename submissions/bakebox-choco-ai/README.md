@@ -1,7 +1,7 @@
 # BAKEBOX-AI: Autonomous AI Bakery Management & Customer Support
 ### CHOCO AI — Hybrid RAG, Multi-Level Recursive BOM & ACID Concurrency on IBM Db2 12.1
 
-[![Tests](https://img.shields.io/badge/tests-72%20passed%20%7C%200%20failed-brightgreen)](#testing--verification)
+[![Tests](https://img.shields.io/badge/tests-73%20passed%20%7C%200%20failed-brightgreen)](#testing--verification)
 [![IBM Db2](https://img.shields.io/badge/IBM%20Db2-LUW%2012.1%20Vector%20%2B%20SQL%20PL-054ADA)](#ibm-db2-integration)
 [![FastAPI](https://img.shields.io/badge/FastAPI-10%20REST%20Routes%20%2B%20%2Fdemo%20UI-009688)](#rest-api--interactive-playground)
 [![Security](https://img.shields.io/badge/Security-RBAC%20%7C%202FA%20%7C%20SHA--256%20Audit-orange)](#security--privacy-architecture)
@@ -13,14 +13,14 @@
 
 ## Judge Quickstart (Verify in 60 Seconds — Zero Docker Required)
 
-Reviewers can run all **72 automated tests**, inspect the **30-query retrieval ablation benchmark**, and test the **interactive web playground** offline without database credentials or external API keys (backed by our thread-safe, ACID snapshot-rollback PEP 249 `MockDb2Connection` and `_OfflineMockVectorStore` cosine simulator):
+Reviewers can run all **73 automated tests**, inspect the **30-query retrieval ablation benchmark**, and test the **interactive web playground** offline without database credentials or external API keys (backed by our thread-safe, ACID snapshot-rollback PEP 249 `MockDb2Connection` and `_OfflineMockVectorStore` cosine simulator):
 
 ```bash
 # 1. Enter the submission directory & install dependencies
 cd submissions/bakebox-choco-ai
 pip install -r requirements.txt
 
-# 2. Run all 72 unit, HTTP API, concurrency, security, rollback & audit tests
+# 2. Run all 73 unit, HTTP API, concurrency, security, rollback & audit tests
 python -m unittest discover -s tests -v
 
 # 3. Run the 30-query, 4-channel empirical retrieval ablation benchmark
@@ -66,9 +66,9 @@ uvicorn src.api:app --reload
 | :--- | :---: | :--- | :--- |
 | **1. IBM Db2 Integration & Depth** | **25%** | Native `VECTOR(384, FLOAT32)` + `SYSTOOLS.BSON2JSON` predicate pushdown (`DB2LlamaVS`); Multi-Level Recursive BOM CTE (`WITH RECIPE_BOM UNION ALL`, `DECIMAL(10, 4)`); SQL PL Stored Procedure `SP_RESERVE_CAKE_STOCK` (`FOR UPDATE OF stock_qty WITH RS` + `WHERE CURRENT OF`); single-UOW ACID transactions; sargable `phone_last10` B-Tree index; `V_ACTIVE_BAKERY_ORDERS` & `V_MASKED_BAKERY_ORDERS` views; `BB_USER_CONVERSATION_BUFFER`; `BB_AUDIT_LOG`. | [`src/db.py`](src/db.py)<br>[`src/ingest.py`](src/ingest.py)<br>[`src/order_engine.py`](src/order_engine.py)<br>[`src/vector_store.py`](src/vector_store.py) |
 | **2. Innovation & Real-World Impact** | **20%** | Engineered for a 20-year regional Mathura bakery (*Shri Ram Baker's*, Holigate & Gosna branches) eliminating late-night lost sales, ingredient blind spots, and overselling; Hinglish CRAG query expansion + Self-RAG factual safety; one-click browser playground at `GET /demo`. | [`src/retriever.py`](src/retriever.py)<br>[`src/query_engine.py`](src/query_engine.py)<br>[`src/demo_ui.py`](src/demo_ui.py) |
-| **3. Technical Architecture & AI** | **15%** | Modular 9-file pipeline; 3-Way Reciprocal Rank Fusion ($k=60$) with cached 384-d embeddings; official `google-genai` SDK with request-scoped tool closures (zero cross-session race leaks) and deterministic `--no-llm` fallback; matching [`architecture.md`](architecture.md). | [`src/query_engine.py`](src/query_engine.py)<br>[`src/api.py`](src/api.py)<br>[`architecture.md`](architecture.md) |
+| **3. Technical Architecture & AI** | **15%** | Modular 9-file pipeline; 3-Way Reciprocal Rank Fusion ($k=60$) with cached 384-d embeddings; **Google Gemini 1.5 Flash** (`gemini-1.5-flash` via `google-genai`) with 5 request-scoped agentic tools (zero cross-session race leaks) and deterministic `--no-llm` fallback; matching [`architecture.md`](architecture.md). | [`src/query_engine.py`](src/query_engine.py)<br>[`src/api.py`](src/api.py)<br>[`architecture.md`](architecture.md) |
 | **4. Security** | **15%** | Zero committed secrets; submission-local `.env` isolation; least-privilege Db2 roles & append-only `BB_AUDIT_LOG` ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)); parameterized SQL + `validate_doc_id()` driver SQLi guard; 2FA phone auth + `OrderAuthRateLimiter` brute-force lockout + PII masking; NFKC + zero-width prompt guardrails + XML delimiters + output secret/XSS scrubbing; hardened CORS. | [`src/security.py`](src/security.py)<br>[`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)<br>[`.env.example`](.env.example) |
-| **5. Reproducibility & Code Quality** | **15%** | **72 automated tests passing (`0 errors, 0 failures`)** across concurrency, ACID rollback injection, HTTP `TestClient`, security, and audit integrity; strict 30-query ablation benchmark; Docker Db2 setup ([`docker-compose.yml`](docker-compose.yml)); Python 3.10–3.14 [`requirements.txt`](requirements.txt). | [`tests/`](tests/)<br>[`docker-compose.yml`](docker-compose.yml)<br>[`requirements.txt`](requirements.txt) |
+| **5. Reproducibility & Code Quality** | **15%** | **73 automated tests passing (`0 errors, 0 failures`)** across concurrency, ACID rollback injection, Gemini tool schemas, HTTP `TestClient`, security, and audit integrity; strict 30-query ablation benchmark; Docker Db2 setup ([`docker-compose.yml`](docker-compose.yml)); Python 3.10–3.14 [`requirements.txt`](requirements.txt). | [`tests/`](tests/)<br>[`docker-compose.yml`](docker-compose.yml)<br>[`requirements.txt`](requirements.txt) |
 | **6. Documentation & Presentation** | **10%** | Complete [`submission.json`](submission.json), MIT [`LICENSE`](LICENSE), [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), 11 production screenshots ([`docs/screenshots/`](docs/screenshots/README.md)), video demo, and clean commit scope inside `submissions/bakebox-choco-ai/`. | [`README.md`](README.md)<br>[`submission.json`](submission.json)<br>[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
 
 ---
@@ -140,7 +140,7 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
          └─ Channel 3: Sparse Scikit-Learn TF-IDF Cosine Matrix
                       │
                       ▼
-       Request-Scoped Agentic Dispatcher (google-genai SDK / Deterministic --no-llm Fallback)
+       Request-Scoped Agentic Dispatcher (Gemini 1.5 Flash `gemini-1.5-flash` / Deterministic `--no-llm` Fallback)
          ├─ recommend_cakes()            -> Up to 3 verified catalog JSON cards
          ├─ track_live_order()           -> 2FA indexed Db2 lookup + PII boundary masking
          ├─ get_store_policy_or_advisory()-> Policy / Wait-Time / Tawa advisory retrieval
@@ -151,7 +151,7 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
        Self-RAG Fact Verifier & Output Scrubber (Dry Tawa Rule + Credential/XSS Redaction)
 ```
 
-* **Official `google-genai` SDK + Request Isolation:** Tool callables are created per request via `_build_request_tools(call_state, session_id)` inside [`src/query_engine.py`](src/query_engine.py), preventing concurrent user sessions from overwriting each other's recommendations or order records.
+* **Gemini 1.5 Flash (`google-genai` SDK) + Request Isolation:** Tool callables are created per request via `_build_request_tools(call_state, session_id)` inside [`src/query_engine.py`](src/query_engine.py) with explicit `AutomaticFunctionCallingConfig`, preventing concurrent user sessions from overwriting each other's recommendations or order records.
 * **Zero-Hallucination Deterministic Fallback:** Running with `--no-llm` or without `GEMINI_API_KEY` routes the exact same Db2 tools deterministically.
 
 ---
@@ -170,7 +170,7 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
 
 * **Backend & API:** Python 3.10–3.14, FastAPI, Pydantic v2, Uvicorn
 * **Database & Connectors:** IBM Db2 LUW 12.1 (`icr.io/db2_community/db2:12.1.2.0`), `ibm_db`, `ibm_db_dbi`, `llama-index-vector-stores-db2` (`DB2LlamaVS`)
-* **AI, RAG & Embeddings:** LlamaIndex (`llama-index-core`), `fastembed` (`BAAI/bge-small-en-v1.5`, 384-d local embeddings), `scikit-learn` (TF-IDF), `numpy`, Okapi BM25, Google Gemini (`google-genai`)
+* **AI, RAG & Embeddings:** LlamaIndex (`llama-index-core`), `fastembed` (`BAAI/bge-small-en-v1.5`, 384-d local embeddings), `scikit-learn` (TF-IDF), `numpy`, Okapi BM25, Google Gemini 1.5 Flash (`gemini-1.5-flash`, `google-genai`)
 * **Testing & Tooling:** `unittest`, `pytest`, `httpx` (`TestClient`), Docker Compose
 
 ---
@@ -334,7 +334,7 @@ uvicorn src.api:app --reload
 
 ## Testing & Verification
 
-Run the official repository validator from the repository root, plus all 72 tests and the 30-query benchmark:
+Run the official repository validator from the repository root, plus all 73 tests and the 30-query benchmark:
 
 ```bash
 # From repo root:
@@ -347,7 +347,7 @@ python tests/evaluate_retrieval.py
 
 **Observed Output Summary:**
 * `scripts/validate_submission.py`: `ALL VALIDATION CHECKS PASSED.`
-* `python -m unittest discover -s tests -v`: `Ran 72 tests in ~18.9s — OK` (`0` errors, `0` failures)
+* `python -m unittest discover -s tests -v`: `Ran 73 tests in ~21s — OK` (`0` errors, `0` failures)
 * `python tests/evaluate_retrieval.py`: `[PASSED] Empirical 4-channel ablation benchmark verified strictly against ground-truth IDs!` (`100.0% Hit@3`, `0.94 MRR`)
 
 ---
@@ -374,7 +374,7 @@ python tests/evaluate_retrieval.py
 ## Technical Defense & Architectural FAQ
 
 * **Q1: Why keep `submissions/bakebox-choco-ai/` separate from the full React frontend repository?**  
-  In strict compliance with IBM Db2 TechX PR rules, the submission folder contains only self-contained backend AI/Db2 services, SQL RBAC scripts, and 72 offline-reproducible tests—never modifying repo root configs or peer submissions. Reviewers can test interactive UI workflows locally at `/demo` or watch the React storefront live in the [YouTube Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
+  In strict compliance with IBM Db2 TechX PR rules, the submission folder contains only self-contained backend AI/Db2 services, SQL RBAC scripts, and 73 offline-reproducible tests—never modifying repo root configs or peer submissions. Reviewers can test interactive UI workflows locally at `/demo` or watch the React storefront live in the [YouTube Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
 * **Q2: How do you ensure offline mock support does not mask real database failures?**  
   `is_live_db2_available()` only enables `MockDb2Connection` when credentials are omitted/placeholder or `DB2_FORCE_MOCK=true`. Once real credentials are configured, [`src/db.py`](src/db.py) connects strictly via `ibm_db_dbi.connect(...)` and propagates authentic database exceptions.
 * **Q3: Why normalize `phone_last10` instead of querying `RIGHT(REPLACE(customer_phone, ...), 10)`?**  

@@ -178,4 +178,4 @@ Shri Ram Baker par har cake order par live fresh bake hota hai (standard 3-4 gha
 python -m unittest discover -s submissions/bakebox-choco-ai/tests -v
 ```
 - **Total Suites Executed:** 6 test modules (`test_audit_chain.py`, `test_guardrails_and_api.py`, `test_order_concurrency.py`, `test_retrieval.py`, `test_rrf_fusion.py`, `test_session_memory.py`).
-- **Result:** `Ran 72 tests in ~16.8s — OK` (covering ACID row locks, single-UOW rollback integrity, SHA-256 audit tampering & concurrency, 3-Way RRF, Hinglish CRAG, Self-RAG, FastAPI `TestClient` routes, brute-force 2FA lockout, and prompt-injection defense).
+- **Result:** `Ran 73 tests in ~21s — OK` (covering ACID row locks, single-UOW rollback integrity, SHA-256 audit tampering & concurrency, Gemini 1.5 Flash 5-tool schemas & isolation, 3-Way RRF, Hinglish CRAG, Self-RAG, FastAPI `TestClient` routes, brute-force 2FA lockout, and prompt-injection defense).
