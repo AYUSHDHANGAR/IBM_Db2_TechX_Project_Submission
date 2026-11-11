@@ -183,6 +183,73 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
 * **Request-Scoped Tool Isolation:** `_build_request_tools(call_state, session_id)` binds fresh per-request Python tool callables for every query so concurrent sessions never cross-contaminate `ui_cards`, `order_details`, or `placed_order`.
 * **Db2 Session Hydration & `--no-llm` Parity:** Cache misses automatically reload prior turns from `BB_USER_CONVERSATION_BUFFER`; offline `--no-llm` mode routes recommendations, BOM availability checks, store policies, structured checkout, and 2FA tracking deterministically.
 
+### The 5 Request-Scoped Agentic Tools (`src/query_engine.py`)
+
+All 5 tools are defined inside [`_build_request_tools(call_state, session_id)`](src/query_engine.py) in [`src/query_engine.py`](src/query_engine.py) and passed dynamically to **Google Gemini 1.5 Flash (`gemini-1.5-flash`)** on each request (keeping every customer session strictly isolated):
+
+1. **Tool 1: `recommend_cakes(user_query, eggless_only=False, limit=3)`**
+   * **Purpose:** Precision cake & savory catalog discovery capped at `limit=3` clean product cards.
+   * **How it works:**
+     * Pushes structured predicates (`type='cake'`, optional `eggless_flag=1`) into IBM Db2 native vector store (`BB_CHUNKS_VECTOR` via `DB2LlamaVS`) for Cosine Similarity search.
+     * Concurrently ranks exact SKUs and keywords via Okapi **BM25** and flavor/weight n-grams via **TF-IDF**.
+     * Expands Hinglish cravings via **Corrective RAG (CRAG)** and fuses all 3 channels with **Reciprocal Rank Fusion ($k=60$)**.
+     * Enforces relevance threshold (`min_rrf_score >= 0.015`), deduplicates SKUs, and returns JSON cards containing `sku_id`, `name`, `flavor`, `category`, `weight_kg`, `price`, `is_eggless_available`, `image_url`, and `rrf_score`.
+
+2. **Tool 2: `track_live_order(order_id, phone_number="")`**
+   * **Purpose:** Real-time backend order status tracking without phone calls or operator delay.
+   * **How it works:**
+     * Connects to IBM Db2 via `ibm_db_dbi` and runs a parameterized join/lookup over `BB_ORDERS` and `BB_ORDER_ITEMS`.
+     * Queries the indexed **`phone_last10`** column (`IDX_BB_ORDER_PHONE`) for O(log N) sargable lookups immune to SQL/`LIKE` wildcard injection.
+     * **Two-Factor Authentication & IP+Order Rate Limiter:** Requires matching the registered 10-digit phone number; [`OrderAuthRateLimiter`](src/security.py) blocks repeated guesses by `(client_ip, order_id)` after 5 mismatches without locking out genuine buyers.
+     * **Automated PII Masking:** Masks customer names (`R**** S*****`), phones (`+91 ******3210`), and delivery addresses (`***, Mathura, UP (Confidential)`) at the DB boundary and reports live order state (`CONFIRMED` $\rightarrow$ `BAKING` $\rightarrow$ `DELIVERED` / `REFUNDED`).
+
+3. **Tool 3: `get_store_policy_or_advisory(user_query)`**
+   * **Purpose:** Authoritative store policies, Mathura branch details, fresh-baking wait times, and culinary care guidance.
+   * **How it works:**
+     * Runs metadata-filtered hybrid retrieval strictly scoped to `type IN ['policy', 'advisory', 'store_info']` so cake SKUs never bleed into policy answers.
+     * Answers verified store rules accurately: **3–4 hours** fresh made-to-order baking window, **Pure Veg Khoaa Eggless** vs egg customization, **dry tawa / skillet reheating only for patties (never microwave)**, Holigate & Gosna branch timings (`8:00 AM – 11:00 PM`), and Celebration Happiness Guarantee terms.
+
+4. **Tool 4: `check_cake_ingredients_bom(cake_id, quantity=1)`**
+   * **Purpose:** Multi-level raw ingredient & sub-assembly availability verification before confirming custom or bulk orders.
+   * **How it works:**
+     * Executes an in-database **IBM Db2 Recursive Bill-of-Materials (BOM) CTE** (`WITH RECIPE_BOM ... UNION ALL` up to depth `5`) across `BB_RECIPES` $\rightarrow$ `BB_INGREDIENT_COMPONENTS` $\rightarrow$ `BB_INVENTORY`.
+     * Scales required raw ingredients by ordered `quantity` using explicit typed arithmetic (`CAST(? AS DECIMAL(10, 4))`), returning `bakeable` status, `missing_ingredients`, and full ingredient tree quantities.
+
+5. **Tool 5: `place_verified_order(cake_id, customer_name, customer_phone, quantity=1, cake_base="Khoaa (Eggless)")`**
+   * **Purpose:** End-to-end atomic transactional checkout in IBM Db2 when verified customer details are provided.
+   * **How it works:**
+     * Executes inside one atomic **IBM Db2 Unit of Work**: quantity-scaled Recursive BOM CTE check $\rightarrow$ exclusive row lock via SQL PL stored procedure **`SP_RESERVE_CAKE_STOCK`** (`FOR UPDATE OF stock_qty WITH RS`) $\rightarrow$ collision-free ID from **`SEQ_BB_ORDER_ID`** $\rightarrow$ `INSERT` into `BB_ORDERS` + `BB_ORDER_ITEMS` (with catalog-matched `cake_weight`) $\rightarrow$ keyed **HMAC-SHA256** block in `BB_AUDIT_LOG` $\rightarrow$ single `COMMIT` (or clean `ROLLBACK` on any error).
+
+### How Gemini 1.5 Flash Directly Interacts with the Tools (Code Implementation)
+
+Inside [`src/query_engine.py`](src/query_engine.py), each customer turn binds isolated per-request callables and invokes **Gemini 1.5 Flash (`gemini-1.5-flash`)** using the official **`google-genai`** SDK with automatic function calling enabled:
+
+```python
+# 1. Resolve Gemini 1.5 Flash runtime dynamically & build per-request isolated tools
+call_state: Dict[str, Any] = {"client_ip": client_ip}
+tools = self._build_request_tools(call_state, session_id)
+# tools = [recommend_cakes, track_live_order, get_store_policy_or_advisory,
+#          check_cake_ingredients_bom, place_verified_order]
+
+# 2. Invoke Gemini 1.5 Flash via official google-genai SDK with Automatic Function Calling
+runtime = _resolve_gemini_runtime()  # model_name defaults to "gemini-1.5-flash"
+response = runtime["client"].models.generate_content(
+    model=runtime["model_name"],
+    contents=prompt_payload,  # Delimited <conversation_history> + <customer_input>
+    config=runtime["types"].GenerateContentConfig(
+        system_instruction=SYSTEM_INSTRUCTION,
+        tools=tools,
+        automatic_function_calling=runtime["types"].AutomaticFunctionCallingConfig(
+            disable=False,
+            maximum_remote_calls=6,
+        ),
+    ),
+)
+```
+
+* **Automatic Tool Orchestration & Synthesis:** Gemini 1.5 Flash compiles all 5 typed Python callables into `FunctionDeclaration` schemas, decides autonomously which Db2 tools to invoke (chaining BOM + recommendation + tracking when needed), inspects live DB results, and synthesizes a polite Hinglish/English reply before [`SelfRAGEvaluator`](src/query_engine.py) verifies factual rules.
+* **Legacy SDK & Zero-Hallucination Offline Fallbacks:** If only legacy `google-generativeai` is present, `_invoke_gemini_with_tools()` falls back cleanly to `GenerativeModel(..., tools=tools).start_chat(enable_automatic_function_calling=True)`; when `GEMINI_API_KEY` is omitted or `--no-llm` is passed, the deterministic dispatcher routes the exact same Db2 tools reliably with zero hallucinations.
+
 ---
 
 ## 7. Security, Privacy & Governance
