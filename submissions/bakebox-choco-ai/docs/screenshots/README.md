@@ -14,39 +14,27 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ![IBM Db2 Developer Extension](01_ibm_db2_extension_tables.png)
 
 > [!NOTE]
-> **Production Deployment vs Evaluation Scope:**  
-> Screenshot `01_ibm_db2_extension_tables.png` demonstrates the complete enterprise schema from the live deployed Mathura storefront (demonstrated in our YouTube walkthrough).
-> For lightweight, zero-bloat hackathon reproducibility, this submission package (`submissions/bakebox-choco-ai/`) isolates the core evaluated microservices: `BB_CHUNKS_VECTOR` (Db2 native vector search via `DB2LlamaVS` + BSON metadata pushdown), `BB_ORDERS` & `BB_ORDER_ITEMS` (relational ACID tables with `FK_BB_ORDER ON DELETE CASCADE`), `BB_CAKES` & `BB_INVENTORY`/`BB_RECIPES`/`BB_INGREDIENT_COMPONENTS` (Recursive BOM CTE + `SP_RESERVE_CAKE_STOCK`), `BB_AUDIT_LOG` (SHA-256 hash chain), `BB_USER_CONVERSATION_BUFFER` (Db2 session buffer), and `V_ACTIVE_BAKERY_ORDERS` / `V_MASKED_BAKERY_ORDERS` SQL views, backed by datasets in `data/`.
+> **Storefront Prototype Screenshots vs Evaluated Backend Submission Scope:**  
+> Screenshots `01`–`11` were captured from the broader **BAKEBOX 2.0 React + FastAPI Full-Stack Prototype** shown in our YouTube walkthrough.
+> This self-contained hackathon submission (`submissions/bakebox-choco-ai/`) packages the complete verified **IBM Db2 12.1 backend, AI/RAG engine, REST API (`10` routes + `/demo` playground), RBAC SQL scripts, `15`-SKU catalog (`25` knowledge nodes), and `79`-test suite (`78` offline + `1` opt-in live-Db2 smoke test)**:
+> - **Verified Submission Schema (`src/ingest.py`):** `BB_CHUNKS_VECTOR` (`DB2LlamaVS`), `BB_ORDERS` + `BB_ORDER_ITEMS` (`FK_BB_ORDER ON DELETE CASCADE`), `BB_CAKES`, `BB_INVENTORY`, `BB_RECIPES`, `BB_INGREDIENT_COMPONENTS`, `BB_AUDIT_LOG`, `BB_USER_CONVERSATION_BUFFER`, views `V_ACTIVE_BAKERY_ORDERS` & `V_MASKED_BAKERY_ORDERS`, sequence `SEQ_BB_ORDER_ID`, and SQL PL `SP_RESERVE_CAKE_STOCK`.
 
-- **Component:** IBM Db2 Developer Extension in Visual Studio Code.
-- **Connection:** Live instance connected at `localhost@IBMDB201` under schema `DBAYUSH`.
-- **Database Tables Verified:**
-  - `BB_CAKES`: Full product catalog table containing 558+ live bakery items.
-  - `BB_CHUNKS_VECTOR`: Dense vector table created via `DB2LlamaVS` for native vector search.
-  - `BB_CUSTOM_CAKES`: User-customized cake design records.
-  - `BB_DEMO_LLAMA_COSINE`: LlamaIndex cosine similarity index table.
-  - `BB_ORDERS`: Relational order table storing order statuses, customer details, and kitchen dispatch data.
-  - `BB_ORDER_ITEMS`: Relational line items associated with each order.
-  - `BB_PARTY_ACCESSORIES`: Bakery party supplies and add-ons.
-  - `BB_RAG_CHUNKS`: Hybrid RAG knowledge base table storing dense vector embeddings, metadata JSON, and chunk text.
-  - `BB_USERS`: Registered bakery customer profiles and authentication credentials.
-  - `BB_USER_CONVERSATION_BUFFER`: Strict session-isolated conversation history buffer.
-- **Data Viewer:** Highlights active records in `DBAYUSH.BB_RAG_CHUNKS` with `METADATA_JSON`, vector embeddings, and real-time timestamps.
+- **Component:** IBM Db2 Developer Extension in Visual Studio Code (Prototype Schema Snapshot).
+- **Connection:** Live instance connected at `localhost@IBMDB201`.
+- **Database Objects Highlighted in Prototype Capture:** Active relational catalog, order line items, conversation history buffer, and dense vector chunks (`METADATA_JSON` / vector embeddings).
 
 ---
 
-### 1.2 Customer Storefront & Catalog Experience
+### 1.2 Customer Storefront & Catalog Experience (Full-Stack Prototype)
 #### `07_storefront_catalog_overview.png`
 ![Storefront Catalog Overview](07_storefront_catalog_overview.png)
-- **Component:** BAKEBOX AI 2.0 Customer Storefront & Header.
-- **Operational Metrics:** Real-time branch indicators (*Branch 1: Bhagel Chaupal, Khatoti Kua (Mathura) | Branch 2: Gausna (Mathura)*), 3-4 hours baking wait time badge, and 100% Pure Veg (Khoaa Eggless Available) badge.
-- **Catalog Navigation:** Instant category filters (*Standard Cakes (558), Custom Designer Cakes (52), Fresh Oven Patties (29), Party Accessories (45)*).
-- **Cake Cards:** Shows standard cake tier cards (Premium Chocolate Truffle, Kitkat Border, Belgian Truffle) with dynamic weights and instant actions.
+- **Component:** Companion React 18 Storefront UI (`BAKEBOX AI 2.0` external prototype repo).
+- **Operational Capabilities:** Branch indicators (*Branch 1: Bhagel Chaupal, Khatoti Kua (Mathura) | Branch 2: Gosna (Mathura)*), 3–4 hours fresh-bake badge, Pure Veg Khoaa Eggless indicator, and truffle/KitKat/specialty tiers.
+- **Note on Submission Dataset:** `submissions/bakebox-choco-ai/data/sample_catalog.json` includes **15 curated SKUs** spanning *Red Velvet, Black Forest, Pineapple, Strawberry, Belgian Chocolate Truffle, KitKat Border, Butterscotch, and Oven Fresh Patties* (+ 3 supplementary cake nodes + 7 policy chunks = **25 Db2 RAG nodes**).
 
 #### `09_product_catalog_grid_actions.png`
 ![Product Catalog Grid Actions](09_product_catalog_grid_actions.png)
-- **Component:** Strawberry Collection Catalog Grid with Direct Actions.
-- **Features:** Shows specific cake metadata (*Khoaa, Veg Eggless & Egg Available, Pricing at ₹299*), pagination across 558 cakes, and 1-click **Ask CHOCO** & **Add** buttons on every card.
+- **Component:** Strawberry Collection Catalog Grid with Direct **Ask CHOCO** & Cart Actions in the companion prototype storefront (`BB-STR-04-05kg`, ₹299.0).
 
 ---
 
@@ -66,14 +54,10 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ### 1.4 Live Order Tracking & Transactional Db2 Queries
 #### `02_choco_order_status_confirmed.png`
 ![CHOCO Order Status Confirmed](02_choco_order_status_confirmed.png)
-- **Component:** Live Order Tracking via Agentic Tool Calling.
+- **Component:** Live Order Tracking via Agentic Tool Calling (Prototype UI Capture).
 - **User Query:** *"Order #1104 what was the order status of this order id ."*
-- **Database Query Execution:** CHOCO AI queries `BB_ORDERS` and `BB_ORDER_ITEMS` in real time and reports:
-  - **Order ID:** #1104
-  - **Customer Name:** Ayush ji (Phone: 8279783653)
-  - **Status:** `CONFIRMED`
-  - **Items Ordered:** 1x Strawberry Sweet Berry Glaze (0.5kg, Khoaa Eggless base)
-  - **Kitchen Dispatch:** Bhagel Chaupal, Khatoti Kua Branch (Mathura).
+- **Prototype Capture Output:** Displays `BB_ORDERS` / `BB_ORDER_ITEMS` status (`CONFIRMED`, `Strawberry Sweet Berry Glaze`, test account *A**** j** / `+91 ******3653 (Masked)`).
+- **Submitted API / Fixture Behavior:** In `submissions/bakebox-choco-ai/data/sample_orders.json`, `#1104` uses offline fixture *Pooja Verma* (`Black Forest Classic Cherry Gateau`), protected at the backend boundary by 2FA phone verification and automatic PII masking (`P**** V****`, `+91 ******3344`).
 
 #### `03_choco_order_status_delivered.png`
 ![CHOCO Order Status Delivered](03_choco_order_status_delivered.png)
@@ -94,7 +78,7 @@ A full interactive video walkthrough demonstrating the live queries, order track
 ![Refund & Replacement Resolution](08_refund_replacement_resolution.png)
 - **Component:** Refund Procedure Guidance.
 - **User Query:** *"i got previous was damaged how i raise refund ."*
-- **Resolution:** Step-by-step instructions (photo verification within 2 hours via WhatsApp helpline `+91 8923701210`) with priority re-baking dispatch within 60-90 minutes.
+- **Resolution:** Step-by-step instructions (photo verification within 2 hours via Store Support Helpline `+91 ******1210`) with priority re-baking dispatch within 60-90 minutes; backend refund claims enforce 2FA phone matching and HMAC-SHA256 `BB_AUDIT_LOG` entries.
 
 ---
 
@@ -128,14 +112,22 @@ Step 1: Setting up IBM Db2 Relational Schema, Indexes, Views & Stored Procedure.
   -> View V_ACTIVE_BAKERY_ORDERS created successfully.
   -> View V_MASKED_BAKERY_ORDERS created successfully.
   -> Index IDX_BB_ORDER_PHONE created successfully.
+  -> Index IDX_BB_ITEM_ORDER created successfully.
+  -> Index IDX_BB_CAKE_SKU created successfully.
+  -> Index IDX_BB_AUDIT_PREV created successfully.
+  -> Index IDX_BB_AUDIT_CURR created successfully.
+  -> Index IDX_BB_RECIPE_CAKE created successfully.
+  -> Index IDX_BB_COMP_PARENT created successfully.
+  -> Index IDX_BB_BUF_SESSION created successfully.
+  -> Sequence SEQ_BB_ORDER_ID created successfully.
   -> Stored Procedure SP_RESERVE_CAKE_STOCK created successfully.
 
 Step 2: Loading embedding engine 'BAAI/bge-small-en-v1.5'...
 
 Step 3: Generating 384-dimensional dense vectors for knowledge corpus...
-  -> Generated embeddings for 15 knowledge nodes.
+  -> Generated embeddings for 25 knowledge nodes.
 
-Step 4: Ingesting vectors into 'BB_CHUNKS_VECTOR'...
+Step 4: Idempotently syncing vectors into 'BB_CHUNKS_VECTOR'...
   -> Ingestion complete!
 ```
 
@@ -177,5 +169,5 @@ Shri Ram Baker par har cake order par live fresh bake hota hai (standard 3-4 gha
 ```bash
 python -m unittest discover -s submissions/bakebox-choco-ai/tests -v
 ```
-- **Total Suites Executed:** 6 test modules (`test_audit_chain.py`, `test_guardrails_and_api.py`, `test_order_concurrency.py`, `test_retrieval.py`, `test_rrf_fusion.py`, `test_session_memory.py`).
-- **Result:** `Ran 73 tests in ~21s — OK` (covering ACID row locks, single-UOW rollback integrity, SHA-256 audit tampering & concurrency, Gemini 1.5 Flash 5-tool schemas & isolation, 3-Way RRF, Hinglish CRAG, Self-RAG, FastAPI `TestClient` routes, brute-force 2FA lockout, and prompt-injection defense).
+- **Total Suites Executed:** 7 test modules (`test_audit_chain.py`, `test_guardrails_and_api.py`, `test_live_db2_smoke.py`, `test_order_concurrency.py`, `test_retrieval.py`, `test_rrf_fusion.py`, `test_session_memory.py`).
+- **Result:** `Ran 79 tests in ~46s — OK (skipped=1)` — `78` automated tests passed offline (`0` failures, `0` errors) + `1` opt-in live-Db2 smoke test (`test_live_db2_smoke.py`, auto-executed when `.env` configures live IBM Db2) covering ACID row locks, quantity-scaled BOM CTEs, `SEQ_BB_ORDER_ID`, single-UOW rollback integrity, keyed HMAC-SHA256 audit tampering & concurrency, Gemini 1.5 Flash 5-tool schemas & isolation, 3-Way RRF, Hinglish CRAG, Db2 session hydration, Self-RAG, FastAPI `TestClient` routes (`X-Operator-Key` & HTTP 400 validation), IP+order brute-force 2FA lockout, and prompt-injection defense.

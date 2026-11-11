@@ -164,16 +164,29 @@ class TestBakeboxProduction(unittest.TestCase):
             self.assertNotIn("SKU: BB-", p)
 
     def test_data_directory_and_masked_connection(self):
-        """Verify sample data files are present and connection strings mask passwords."""
+        """Verify expanded sample catalog (15+ SKUs), sample orders, and connection password masking."""
         cat_path = os.path.join(_pkg_root, "data", "sample_catalog.json")
         ord_path = os.path.join(_pkg_root, "data", "sample_orders.json")
         with open(cat_path, "r", encoding="utf-8") as f:
             cat_data = json.load(f)
         with open(ord_path, "r", encoding="utf-8") as f:
             ord_data = json.load(f)
-        self.assertGreaterEqual(len(cat_data), 5)
+        self.assertGreaterEqual(len(cat_data), 15)
         self.assertGreaterEqual(len(ord_data), 2)
         self.assertIn("PWD=********", get_masked_connection_string())
+
+    def test_session_hydration_and_deterministic_bom_intent(self):
+        """Verify Db2 BB_USER_CONVERSATION_BUFFER hydrates cleared sessions & BOM queries route cleanly offline."""
+        self.engine.query("Show me chocolate truffle cake", session_id="hydrate_sess_1")
+        self.engine.sessions.clear()
+        restored = self.engine.get_or_create_session("hydrate_sess_1")
+        self.assertGreaterEqual(len(restored.turns), 1)
+        self.assertIn("chocolate truffle", restored.get_context_summary().lower())
+
+        bom_res = self.engine.query("Check BOM ingredients for 2 cakes #1", session_id="bom_chat_sess")
+        self.assertEqual(bom_res["intent"], "BOM_AVAILABILITY")
+        self.assertEqual(bom_res["bom_details"]["quantity"], 2)
+        self.assertTrue(bom_res["bom_details"]["bakeable"])
 
 
 if __name__ == "__main__":

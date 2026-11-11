@@ -14,7 +14,7 @@ import re
 import time
 import threading
 import unicodedata
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 ZERO_WIDTH_RE = re.compile(r"[\u200b-\u200f\u202a-\u202e\ufeff]")
 SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -142,38 +142,60 @@ def mask_order_pii(order: Dict[str, Any]) -> Dict[str, Any]:
     return masked
 
 
+def extract_client_ip(request: Any = None) -> str:
+    """Extract caller IP safely for rate-limit partitioning (defaults to 'local')."""
+    if request is None:
+        return "local"
+    headers = getattr(request, "headers", None)
+    if headers is not None:
+        fwd = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For")
+        if fwd:
+            return str(fwd).split(",")[0].strip()[:64] or "local"
+    client = getattr(request, "client", None)
+    host = getattr(client, "host", None) if client is not None else None
+    return str(host)[:64] if host else "local"
+
+
 class OrderAuthRateLimiter:
     """
     Thread-safe sliding-window brute-force protector for 2FA order/refund phone verification.
-    Locks out repeated failed attempts per order_id within `window_seconds`.
+    Partitions lockouts by `(client_ip, order_id)` so an attacker cannot DoS legitimate buyers.
     """
     def __init__(self, max_failures: int = 5, window_seconds: int = 300):
         self.max_failures = max_failures
         self.window_seconds = window_seconds
         self._lock = threading.Lock()
-        self._failures: Dict[int, list[float]] = {}
+        self._failures: Dict[Tuple[str, int], List[float]] = {}
 
-    def is_locked(self, order_id: int, now: Optional[float] = None) -> bool:
+    def is_locked(self, order_id: int, client_ip: str = "local", now: Optional[float] = None) -> bool:
         t = now or time.time()
+        bucket = (str(client_ip or "local"), int(order_id))
         with self._lock:
-            timestamps = [ts for ts in self._failures.get(order_id, []) if (t - ts) <= self.window_seconds]
-            self._failures[order_id] = timestamps
+            timestamps = [ts for ts in self._failures.get(bucket, []) if (t - ts) <= self.window_seconds]
+            self._failures[bucket] = timestamps
             return len(timestamps) >= self.max_failures
 
-    def record_failure(self, order_id: int, now: Optional[float] = None) -> int:
+    def record_failure(self, order_id: int, client_ip: str = "local", now: Optional[float] = None) -> int:
         t = now or time.time()
+        bucket = (str(client_ip or "local"), int(order_id))
         with self._lock:
-            timestamps = [ts for ts in self._failures.get(order_id, []) if (t - ts) <= self.window_seconds]
+            timestamps = [ts for ts in self._failures.get(bucket, []) if (t - ts) <= self.window_seconds]
             timestamps.append(t)
-            self._failures[order_id] = timestamps
+            self._failures[bucket] = timestamps
             return len(timestamps)
 
-    def reset(self, order_id: Optional[int] = None) -> None:
+    def reset(self, order_id: Optional[int] = None, client_ip: Optional[str] = None) -> None:
         with self._lock:
-            if order_id is None:
+            if order_id is None and client_ip is None:
                 self._failures.clear()
+            elif order_id is not None and client_ip is None:
+                for key in [k for k in self._failures if k[1] == int(order_id)]:
+                    self._failures.pop(key, None)
+            elif order_id is None and client_ip is not None:
+                for key in [k for k in self._failures if k[0] == str(client_ip)]:
+                    self._failures.pop(key, None)
             else:
-                self._failures.pop(order_id, None)
+                self._failures.pop((str(client_ip), int(order_id)), None)
 
 
 order_auth_limiter = OrderAuthRateLimiter(max_failures=5, window_seconds=300)

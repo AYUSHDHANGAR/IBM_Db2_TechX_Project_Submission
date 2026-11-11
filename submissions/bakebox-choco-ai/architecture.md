@@ -29,9 +29,10 @@ BAKEBOX-AI solves operational and communication bottlenecks for **Shri Ram Baker
 ```mermaid
 flowchart TD
     subgraph Client ["Client & API Layer (src/api.py & src/security.py)"]
-        User["Customer / Reviewer UI (/demo or Swagger /docs)"]
-        Guard["Unicode NFKC + Zero-Width Stripper\nBilingual Prompt Guard + XML Containment"]
-        Session["TTL SessionBufferMemory\n+ BB_USER_CONVERSATION_BUFFER (Db2)"]
+        User["Customer / Operator UI (/demo or Swagger /docs)"]
+        Guard["Unicode NFKC + Zero-Width Stripper\nBilingual Prompt Guard + XML Containment + HTTP 400"]
+        Limiter["IP+Order Rate Limiter + X-Operator-Key"]
+        Session["TTL SessionBufferMemory\n(Hydrated from Db2 BB_USER_CONVERSATION_BUFFER)"]
     end
 
     subgraph AI_Layer ["Agentic AI & Hybrid RAG (src/query_engine.py & src/retriever.py)"]
@@ -43,14 +44,14 @@ flowchart TD
 
     subgraph IBM_Db2 ["IBM Db2 LUW 12.1 Engine (src/db.py, ingest.py, vector_store.py, order_engine.py)"]
         VectorStore[("BB_CHUNKS_VECTOR\nVECTOR(384, FLOAT32) + BSON Metadata Pushdown")]
-        Orders[("BB_ORDERS & BB_ORDER_ITEMS\nIndexed phone_last10 + FK ON DELETE CASCADE")]
+        Orders[("BB_ORDERS & BB_ORDER_ITEMS\nSEQ_BB_ORDER_ID + phone_last10 + FK CASCADE")]
         Catalog[("BB_CAKES, BB_INVENTORY,\nBB_RECIPES, BB_INGREDIENT_COMPONENTS")]
-        Audit[("BB_AUDIT_LOG\nSHA-256 Chained Append-Only Trail")]
+        Audit[("BB_AUDIT_LOG\nKeyed HMAC-SHA256 + Sealed UTC Timestamp")]
         Views["V_ACTIVE_BAKERY_ORDERS\nV_MASKED_BAKERY_ORDERS"]
         SP["SP_RESERVE_CAKE_STOCK\n(FOR UPDATE OF stock_qty WITH RS)"]
     end
 
-    User --> Guard --> Session --> Dispatcher
+    User --> Guard --> Limiter --> Session --> Dispatcher
     Dispatcher -- "recommend_cakes / policy" --> CRAG --> Hybrid
     Hybrid -- "1. Vector Cosine + BSON Pushdown" --> VectorStore
     Hybrid -- "2. Okapi BM25 | 3. TF-IDF" --> Hybrid
@@ -97,6 +98,8 @@ CREATE TABLE BB_ORDERS (
     special_notes VARCHAR(512),
     created_at TIMESTAMP DEFAULT CURRENT TIMESTAMP
 );
+
+CREATE SEQUENCE SEQ_BB_ORDER_ID AS INT START WITH 1105 INCREMENT BY 1 NO CACHE;
 
 CREATE INDEX IDX_BB_ORDER_PHONE ON BB_ORDERS(phone_last10);
 
@@ -220,13 +223,14 @@ FROM BB_ORDERS;
 
 ---
 
-## 5. In-Database Recursive Bill-of-Materials (BOM) CTE
+## 5. Quantity-Scaled In-Database Recursive Bill-of-Materials (BOM) CTE
 
-[`check_recipe_bom_availability()`](src/order_engine.py) executes Db2 LUW recursive SQL (`UNION ALL` without invalid `RECURSIVE` keyword, using `DECIMAL(10, 4)` sub-assembly scaling) to verify multi-tier ingredient stock before order reservation:
+[`check_recipe_bom_availability()`](src/order_engine.py) executes Db2 LUW recursive SQL (`UNION ALL` without invalid `RECURSIVE` keyword, typing the quantity multiplier explicitly via `CAST(? AS DECIMAL(10, 4))` to satisfy Db2 `SQL0418N` parameter typing) before order reservation:
 
 ```sql
 WITH RECIPE_BOM (DEPTH, INGREDIENT_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
-    SELECT 1, r.INGREDIENT_ID, r.INGREDIENT_NAME, CAST(r.QTY_NEEDED AS DECIMAL(10, 4)), i.STOCK_QTY
+    SELECT 1, r.INGREDIENT_ID, r.INGREDIENT_NAME,
+           CAST(r.QTY_NEEDED * CAST(? AS DECIMAL(10, 4)) AS DECIMAL(10, 4)), i.STOCK_QTY
     FROM BB_RECIPES r
     JOIN BB_INVENTORY i ON r.INGREDIENT_ID = i.INGREDIENT_ID
     WHERE r.CAKE_ID = ?
@@ -283,27 +287,28 @@ END
 
 ### 6.2 Atomic Multi-Step Order Flow (`place_verified_order_atomic`)
 All steps share one Unit of Work (`commit=False` on sub-operations, single `conn.commit()` on completion, `conn.rollback()` on any error):
-`BOM CTE Check` $\rightarrow$ `SP_RESERVE_CAKE_STOCK` $\rightarrow$ `INSERT BB_ORDERS` $\rightarrow$ `INSERT BB_ORDER_ITEMS` $\rightarrow$ `INSERT BB_AUDIT_LOG` $\rightarrow$ `COMMIT`.
+`Quantity-Scaled BOM CTE Check` $\rightarrow$ `SP_RESERVE_CAKE_STOCK` $\rightarrow$ `NEXT VALUE FOR SEQ_BB_ORDER_ID` $\rightarrow$ `INSERT BB_ORDERS` $\rightarrow$ `INSERT BB_ORDER_ITEMS` (catalog-matched `cake_weight`) $\rightarrow$ `INSERT BB_AUDIT_LOG` $\rightarrow$ `COMMIT`.
 
-### 6.3 Cryptographic SHA-256 Hash-Chained Audit Trail (`BB_AUDIT_LOG`)
-Every block links cryptographically to its immediate predecessor via:
-$$\text{Current Hash} = \text{SHA256}(\text{Prev Hash} \,\|\, \text{session\_id} \,\|\, \text{action\_type} \,\|\, \text{canonical\_payload\_json})$$
+### 6.3 Keyed HMAC-SHA256 Hash-Chained Audit Trail (`BB_AUDIT_LOG`)
+Every block seals a canonical UTC `_audit_ts` inside its payload JSON and links cryptographically to its immediate predecessor via a keyed HMAC (`AUDIT_HMAC_SECRET`):
+$$\text{Current Hash} = \text{HMAC-SHA256}_{K}\big(\text{Prev Hash} \,\|\, \text{session\_id} \,\|\, \text{action\_type} \,\|\, \text{canonical\_payload\_json\_with\_ts}\big)$$
 
 ```mermaid
 flowchart LR
-    G["Genesis\nPrev: 0000...000\nHash: H(0)"] --> B1["Block #1: ORDER_PLACED\nPrev: H(0)\nHash: H(1)"]
-    B1 --> B2["Block #2: REFUND_APPROVED\nPrev: H(1)\nHash: H(2)"]
-    B2 --> B3["Block #3: REFUND_AUTH_FAILED\nPrev: H(2)\nHash: H(3)"]
+    G["Genesis\nPrev: 0000...000\nHMAC: H(0)"] --> B1["Block #1: ORDER_PLACED\nPrev: H(0)\nHMAC: H(1)"]
+    B1 --> B2["Block #2: REFUND_APPROVED\nPrev: H(1)\nHMAC: H(2)"]
+    B2 --> B3["Block #3: REFUND_AUTH_FAILED\nPrev: H(2)\nHMAC: H(3)"]
 ```
 
-[`verify_audit_chain(conn)`](src/order_engine.py) (`GET /api/audit/verify`) traverses `BB_AUDIT_LOG` in primary-key order and pinpoints the exact `log_id` if any payload or pointer was tampered with.
+[`verify_audit_chain(conn)`](src/order_engine.py) (`GET /api/audit/verify`) traverses `BB_AUDIT_LOG` in primary-key order and pinpoints the exact `log_id` if any payload, timestamp, or pointer was tampered with.
 
 ---
 
 ## 7. Security, Isolation & Least-Privilege Governance
 
-* **Zero Secret Leakage:** Local `.env` only loaded from `submissions/bakebox-choco-ai/.env`; connection credentials resolved on-demand and masked in telemetry (`PWD=********`).
-* **Request-Scoped Agentic Tool Closures:** `_build_request_tools(call_state, session_id)` binds fresh per-request tool wrappers so concurrent sessions never contaminate each other's UI cards or order lookups.
-* **SQL Injection & Third-Party Driver Guard:** All relational SQL queries use parameterized `?` markers and sargable `phone_last10` equality; `validate_doc_id()` enforces strict identifier regex prior to `DB2LlamaVS.delete()`.
-* **2FA Order Protection & Rate Limiter:** Tracking and public refund evaluation verify order ID + canonical 10-digit phone, enforce sliding-window lockout (`OrderAuthRateLimiter` after 5 consecutive mismatches), and mask PII via `mask_order_pii()`.
-* **Least-Privilege Db2 Roles (`sql/least_privilege_setup.sql`):** Separates `BAKEBOX_READER_ROLE` (catalog + masked views) from `BAKEBOX_APP_ROLE` (operational DML + append-only `SELECT, INSERT` on `BB_AUDIT_LOG`).
+* **Zero Secret Leakage:** Local `.env` only loaded from `submissions/bakebox-choco-ai/.env`; connection credentials and `AUDIT_HMAC_SECRET` / `OPERATOR_API_KEY` resolved on-demand and masked in telemetry (`PWD=********`).
+* **Operator Endpoint Protection & HTTP 400 Validation:** When `OPERATOR_API_KEY` is configured, `GET /api/orders/masked-summary` and `GET /api/audit/verify` require constant-time verified `X-Operator-Key` headers; malformed/blocked `ValueError` inputs map cleanly to `HTTP 400` JSON responses via FastAPI `@app.exception_handler(ValueError)`.
+* **Request-Scoped Agentic Tool Closures & Db2 Hydration:** `_build_request_tools(call_state, session_id)` binds fresh per-request tool wrappers so concurrent sessions never contaminate each other's state, while `get_or_create_session()` restores historical turns from `BB_USER_CONVERSATION_BUFFER` on cache miss or restart.
+* **SQL Injection & Third-Party Driver Guard:** All relational SQL queries use parameterized `?` markers and sargable `phone_last10` equality; `validate_doc_id()` enforces strict identifier regex prior to `DB2LlamaVS.delete()`, including idempotent delete-before-insert sync in `src/ingest.py`.
+* **IP-Partitioned 2FA Order Rate Limiter & PII Masking:** Tracking and refund evaluation verify order ID + canonical 10-digit phone, partition `OrderAuthRateLimiter` lockouts by `(client_ip, order_id)` after 5 mismatches (preventing unauthenticated victim lockout), and mask PII via `mask_order_pii()`.
+* **Least-Privilege Db2 Roles (`sql/least_privilege_setup.sql`):** Separates `BAKEBOX_READER_ROLE` (catalog + masked views) from `BAKEBOX_APP_ROLE` (operational DML, `USAGE ON SEQUENCE SEQ_BB_ORDER_ID`, `EXECUTE ON PROCEDURE SP_RESERVE_CAKE_STOCK`, and append-only `SELECT, INSERT` on `BB_AUDIT_LOG`).

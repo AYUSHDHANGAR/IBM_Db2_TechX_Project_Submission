@@ -10,10 +10,12 @@ Implements:
 5. Phone-Authenticated Happiness Guarantee Refund Evaluation with brute-force lockout.
 """
 import hashlib
+import hmac
 import json
 import os
 import sys
 import threading
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 _pkg_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -24,7 +26,43 @@ from src.db import execute_dml, execute_query
 from src.security import extract_phone_last10, order_auth_limiter
 
 GENESIS_PREV_HASH = "0" * 64
+_DEFAULT_DEV_AUDIT_KEY = "bakebox-db2-audit-hmac-dev-key"
 _audit_append_lock = threading.Lock()
+_CATALOG_WEIGHT_CACHE: Optional[Dict[str, str]] = None
+
+
+def _get_audit_hmac_key() -> bytes:
+    """Resolve HMAC signing key from env (with deterministic local dev fallback)."""
+    raw = (os.getenv("AUDIT_HMAC_SECRET") or "").strip()
+    if not raw or raw == "your_audit_hmac_secret_here":
+        raw = _DEFAULT_DEV_AUDIT_KEY
+    return raw.encode("utf-8")
+
+
+def _resolve_cake_weight(sku_id: str) -> str:
+    """Look up item weight from sample_catalog.json or canonical SKU suffix."""
+    global _CATALOG_WEIGHT_CACHE
+    if _CATALOG_WEIGHT_CACHE is None:
+        mapping: Dict[str, str] = {}
+        cat_path = os.path.join(_pkg_root, "data", "sample_catalog.json")
+        try:
+            if os.path.isfile(cat_path):
+                with open(cat_path, "r", encoding="utf-8") as f:
+                    for item in json.load(f):
+                        if item.get("sku_id") and item.get("weight_kg") is not None:
+                            mapping[str(item["sku_id"])] = f"{item['weight_kg']}kg"
+        except Exception:
+            pass
+        _CATALOG_WEIGHT_CACHE = mapping
+
+    if sku_id in _CATALOG_WEIGHT_CACHE:
+        return _CATALOG_WEIGHT_CACHE[sku_id]
+    lower = (sku_id or "").lower()
+    if "-05kg" in lower:
+        return "0.5kg"
+    if "-pty" in lower:
+        return "0.15kg"
+    return "1.0kg"
 
 
 # ==============================================================================
@@ -99,18 +137,19 @@ def call_sp_reserve_cake_stock(conn: Any, cake_id: int, quantity: int = 1, commi
 # 2. IN-DATABASE RECURSIVE BILL-OF-MATERIALS (BOM) CTE (IBM Db2 LUW SYNTAX)
 # ==============================================================================
 
-def check_recipe_bom_availability(conn: Any, cake_id: int) -> List[Dict[str, Any]]:
+def check_recipe_bom_availability(conn: Any, cake_id: int, quantity: int = 1) -> List[Dict[str, Any]]:
     """
     Execute an IBM Db2 LUW Recursive Bill-of-Materials (BOM) CTE (`WITH ... UNION ALL`)
-    traversing multi-level sub-assemblies (`BB_RECIPES -> BB_INGREDIENT_COMPONENTS -> BB_INVENTORY`).
-    Uses DECIMAL(10, 4) precision consistently across live Db2 and offline simulation.
+    traversing multi-level sub-assemblies (`BB_RECIPES -> BB_INGREDIENT_COMPONENTS -> BB_INVENTORY`)
+    scaled by ordered `quantity` using explicit typed DECIMAL(10, 4) parameters.
     """
-    if not isinstance(cake_id, int) or cake_id <= 0:
+    if not isinstance(cake_id, int) or cake_id <= 0 or not isinstance(quantity, int) or quantity <= 0:
         return []
 
     sql = """
     WITH RECIPE_BOM (DEPTH, INGREDIENT_ID, INGREDIENT_NAME, REQUIRED_QTY, CURRENT_STOCK) AS (
-        SELECT 1, r.INGREDIENT_ID, r.INGREDIENT_NAME, CAST(r.QTY_NEEDED AS DECIMAL(10, 4)), i.STOCK_QTY
+        SELECT 1, r.INGREDIENT_ID, r.INGREDIENT_NAME,
+               CAST(r.QTY_NEEDED * CAST(? AS DECIMAL(10, 4)) AS DECIMAL(10, 4)), i.STOCK_QTY
         FROM BB_RECIPES r
         JOIN BB_INVENTORY i ON r.INGREDIENT_ID = i.INGREDIENT_ID
         WHERE r.CAKE_ID = ?
@@ -126,24 +165,24 @@ def check_recipe_bom_availability(conn: Any, cake_id: int) -> List[Dict[str, Any
            CASE WHEN CURRENT_STOCK >= REQUIRED_QTY THEN 'IN_STOCK' ELSE 'OUT_OF_STOCK' END AS AVAILABILITY
     FROM RECIPE_BOM
     """
-    return execute_query(conn, sql, (cake_id,))
+    return execute_query(conn, sql, (float(quantity), cake_id))
 
 
-def is_cake_bakeable(conn: Any, cake_id: int) -> Tuple[bool, List[str]]:
-    """Return `(True, [])` when all BOM ingredients are stocked, else `(False, missing_list)`."""
-    bom_items = check_recipe_bom_availability(conn, cake_id)
+def is_cake_bakeable(conn: Any, cake_id: int, quantity: int = 1) -> Tuple[bool, List[str]]:
+    """Return `(True, [])` when all scaled BOM ingredients are stocked, else `(False, missing_list)`."""
+    bom_items = check_recipe_bom_availability(conn, cake_id, quantity=quantity)
     missing = [item["INGREDIENT_NAME"] for item in bom_items if item["AVAILABILITY"] == "OUT_OF_STOCK"]
     return (len(missing) == 0, missing)
 
 
 # ==============================================================================
-# 3. CRYPTOGRAPHIC SHA-256 HASH-CHAINED AUDIT TRAIL (BB_AUDIT_LOG)
+# 3. CRYPTOGRAPHIC HMAC-SHA256 HASH-CHAINED AUDIT TRAIL (BB_AUDIT_LOG)
 # ==============================================================================
 
 def compute_block_hash(prev_hash: str, session_id: str, action_type: str, payload_str: str) -> str:
-    """Compute deterministic SHA-256 digest over `(prev_hash | session_id | action_type | payload_str)`."""
+    """Compute keyed HMAC-SHA256 digest over `(prev_hash | session_id | action_type | payload_str)`."""
     raw = f"{prev_hash}|{session_id}|{action_type}|{payload_str}".encode("utf-8")
-    return hashlib.sha256(raw).hexdigest()
+    return hmac.new(_get_audit_hmac_key(), raw, hashlib.sha256).hexdigest()
 
 
 def get_latest_audit_hash(conn: Any) -> str:
@@ -163,10 +202,13 @@ def append_audit_log(
     commit: bool = True,
 ) -> Dict[str, Any]:
     """
-    Thread-safely append a tamper-evident SHA-256 hash-chained record to `BB_AUDIT_LOG`.
+    Thread-safely append a tamper-evident keyed HMAC-SHA256 record to `BB_AUDIT_LOG`.
+    Seals an explicit UTC `_audit_ts` timestamp inside the hashed JSON preimage.
     When `commit=False`, participates directly inside the caller's atomic UOW.
     """
-    canonical_payload = json.dumps(payload_dict, sort_keys=True)
+    sealed_payload = dict(payload_dict)
+    sealed_payload.setdefault("_audit_ts", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    canonical_payload = json.dumps(sealed_payload, sort_keys=True)
     with _audit_append_lock:
         try:
             execute_dml(conn, "LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE", (), commit=False)
@@ -183,7 +225,7 @@ def append_audit_log(
     return {
         "session_id": session_id,
         "action_type": action_type,
-        "payload": payload_dict,
+        "payload": sealed_payload,
         "prev_hash": prev_hash,
         "current_hash": current_hash,
     }
@@ -217,6 +259,20 @@ def verify_audit_chain(conn: Any) -> Tuple[bool, Optional[int], Optional[str]]:
 # 4. ATOMIC END-TO-END ORDER PLACEMENT & HAPPINESS GUARANTEE REFUND
 # ==============================================================================
 
+def _allocate_next_order_id(conn: Any) -> int:
+    """Allocate a collision-free Order ID via IBM Db2 SEQ_BB_ORDER_ID sequence (with safe MAX fallback)."""
+    try:
+        rows = execute_query(conn, "SELECT NEXT VALUE FOR SEQ_BB_ORDER_ID AS NEXT_ORDER_ID FROM SYSIBM.SYSDUMMY1")
+        if rows and rows[0].get("NEXT_ORDER_ID") is not None:
+            return int(rows[0]["NEXT_ORDER_ID"])
+    except Exception:
+        pass
+    max_rows = execute_query(conn, "SELECT COALESCE(MAX(ORDER_ID), 1104) + 1 AS NEXT_ORDER_ID FROM BB_ORDERS")
+    if max_rows and max_rows[0].get("NEXT_ORDER_ID") is not None:
+        return int(max_rows[0]["NEXT_ORDER_ID"])
+    return 1105
+
+
 def place_verified_order_atomic(
     conn: Any,
     cake_id: int,
@@ -232,9 +288,9 @@ def place_verified_order_atomic(
     Execute a full single-UOW ACID order transaction inside IBM Db2:
       1. Validate input & extract normalized `phone_last10` for sargable lookup.
       2. Fetch cake catalog metadata from `BB_CAKES`.
-      3. Run In-Db2 Recursive BOM CTE (`is_cake_bakeable`) to confirm raw ingredient stock.
+      3. Run quantity-scaled In-Db2 Recursive BOM CTE (`is_cake_bakeable`) to confirm raw ingredient stock.
       4. Acquire atomic row lock (`SP_RESERVE_CAKE_STOCK` / `FOR UPDATE WITH RS`) without premature commit.
-      5. Insert rows into `BB_ORDERS` + `BB_ORDER_ITEMS` (FK cascade) and `BB_AUDIT_LOG`.
+      5. Allocate Order ID cleanly via Db2 `SEQ_BB_ORDER_ID`, insert `BB_ORDERS` + `BB_ORDER_ITEMS` + `BB_AUDIT_LOG`.
       6. Commit all changes atomically, or rollback cleanly on any failure.
     """
     if not isinstance(cake_id, int) or cake_id <= 0 or not isinstance(quantity, int) or quantity <= 0:
@@ -255,21 +311,22 @@ def place_verified_order_atomic(
             return {"success": False, "status": "CAKE_NOT_FOUND", "message": f"Cake ID #{cake_id} does not exist."}
 
         cake = cakes[0]
-        bakeable, missing = is_cake_bakeable(conn, cake_id)
+        bakeable, missing = is_cake_bakeable(conn, cake_id, quantity=quantity)
         if not bakeable:
             return {
                 "success": False,
                 "status": "BOM_INGREDIENT_SHORTAGE",
                 "missing_ingredients": missing,
-                "message": f"Cannot bake {cake['NAME']}: raw ingredient shortage ({', '.join(missing)}).",
+                "message": f"Cannot bake {quantity}x {cake['NAME']}: raw ingredient shortage ({', '.join(missing)}).",
             }
 
         if not call_sp_reserve_cake_stock(conn, cake_id, quantity, commit=False):
             conn.rollback()
             return {"success": False, "status": "OUT_OF_STOCK", "message": f"{cake['NAME']} is currently sold out or insufficient stock."}
 
-        existing_orders = execute_query(conn, "SELECT ORDER_ID FROM BB_ORDERS")
-        new_order_id = max((int(o["ORDER_ID"]) for o in existing_orders), default=1104) + 1
+        new_order_id = _allocate_next_order_id(conn)
+        sku_id = str(cake.get("SKU_ID") or f"BB-{cake_id}")
+        item_weight = _resolve_cake_weight(sku_id)
         unit_price = float(cake["PRICE"])
         total_amount = round(unit_price * quantity, 2)
 
@@ -294,8 +351,8 @@ def place_verified_order_atomic(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                new_order_id, cake.get("SKU_ID", f"BB-{cake_id}"), cake["NAME"],
-                quantity, unit_price, cake_base, "1.0kg", custom_message.strip(),
+                new_order_id, sku_id, cake["NAME"],
+                quantity, unit_price, cake_base, item_weight, custom_message.strip(),
             ),
             commit=False,
         )
@@ -303,7 +360,7 @@ def place_verified_order_atomic(
             conn,
             session_id,
             "ORDER_PLACED",
-            {"order_id": new_order_id, "cake_id": cake_id, "sku_id": cake.get("SKU_ID"), "qty": quantity, "total_amount": total_amount},
+            {"order_id": new_order_id, "cake_id": cake_id, "sku_id": sku_id, "cake_weight": item_weight, "qty": quantity, "total_amount": total_amount},
             commit=False,
         )
         conn.commit()
@@ -312,11 +369,12 @@ def place_verified_order_atomic(
             "status": "CONFIRMED",
             "order_id": new_order_id,
             "cake_name": cake["NAME"],
+            "cake_weight": item_weight,
             "quantity": quantity,
             "total_amount": total_amount,
             "baking_eta": "3-4 hours (Fresh Baked on Order)",
             "audit_hash": audit_entry["current_hash"],
-            "message": f"Radhe Radhe ji! Order #{new_order_id} confirmed for {cake['NAME']}.",
+            "message": f"Radhe Radhe ji! Order #{new_order_id} confirmed for {quantity}x {cake['NAME']} ({item_weight}).",
         }
     except Exception:
         conn.rollback()
@@ -329,16 +387,17 @@ def evaluate_refund_request(
     reason: str,
     customer_phone: Optional[str] = None,
     require_phone_auth: bool = False,
+    client_ip: str = "local",
 ) -> Dict[str, Any]:
     """
     Evaluate customer refund eligibility under Shri Ram Baker's Happiness Guarantee.
-    Enforces 2FA phone matching, brute-force rate limiting, and single-UOW ACID
+    Enforces 2FA phone matching, IP+order brute-force rate limiting, and single-UOW ACID
     updates paired with tamper-evident `BB_AUDIT_LOG` entries.
     """
     if not isinstance(order_id, int) or order_id <= 0:
         return {"eligible": False, "order_id": order_id, "status": "INVALID_ORDER_ID", "message": "Invalid order_id."}
 
-    if require_phone_auth and order_auth_limiter.is_locked(order_id):
+    if require_phone_auth and order_auth_limiter.is_locked(order_id, client_ip=client_ip):
         return {
             "eligible": False,
             "order_id": order_id,
@@ -374,12 +433,12 @@ def evaluate_refund_request(
     if require_phone_auth:
         stored_10 = extract_phone_last10(str(order.get("CUSTOMER_PHONE", "")))
         if stored_10 != phone_10:
-            order_auth_limiter.record_failure(order_id)
+            order_auth_limiter.record_failure(order_id, client_ip=client_ip)
             append_audit_log(
                 conn,
                 f"order_{order_id}",
                 "REFUND_AUTH_FAILED",
-                {"order_id": order_id, "reason": "Registered phone verification mismatch"},
+                {"order_id": order_id, "client_ip": client_ip, "reason": "Registered phone verification mismatch"},
                 commit=True,
             )
             return {
@@ -388,7 +447,7 @@ def evaluate_refund_request(
                 "status": "PHONE_MISMATCH",
                 "message": f"Verification failed: provided phone number does not match Order #{order_id}.",
             }
-        order_auth_limiter.reset(order_id)
+        order_auth_limiter.reset(order_id, client_ip=client_ip)
 
     status = str(order["ORDER_STATUS"]).upper()
     amount = float(order["TOTAL_AMOUNT"])

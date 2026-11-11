@@ -165,6 +165,37 @@ class TestOrderConcurrencyAndBOM(unittest.TestCase):
         self.assertEqual(self.conn.tables["BB_CAKES"][1]["STOCK_QTY"], initial_stock)
         self.assertEqual(len(self.conn.tables["BB_ORDERS"]), initial_order_count)
 
+    def test_15_bom_quantity_scaling_rejects_excess_qty(self):
+        """BOM availability must scale with quantity and block impossible multi-unit orders."""
+        bom_large = check_recipe_bom_availability(self.conn, cake_id=1, quantity=30)
+        khoaa = next(it for it in bom_large if "Khoaa" in it["INGREDIENT_NAME"])
+        self.assertEqual(khoaa["AVAILABILITY"], "OUT_OF_STOCK")
+
+        res = place_verified_order_atomic(
+            self.conn, cake_id=1, customer_name="Bulk Buyer", customer_phone="9876543210", quantity=30
+        )
+        self.assertFalse(res["success"])
+        self.assertEqual(res["status"], "BOM_INGREDIENT_SHORTAGE")
+
+    def test_16_sequence_order_id_uniqueness_and_weight(self):
+        """Concurrent orders allocate unique IDs via SEQ_BB_ORDER_ID and record accurate item weight."""
+        def place_cake(cid: int):
+            c = get_dbi_connection()
+            return place_verified_order_atomic(
+                c, cake_id=cid, customer_name=f"Buyer {cid}", customer_phone="+91 9811100022", quantity=1
+            )
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            f1 = executor.submit(place_cake, 1)
+            f4 = executor.submit(place_cake, 4)
+            f5 = executor.submit(place_cake, 5)
+            r1, r4, r5 = f1.result(), f4.result(), f5.result()
+
+        self.assertTrue(r1["success"] and r4["success"] and r5["success"])
+        self.assertEqual(len({r1["order_id"], r4["order_id"], r5["order_id"]}), 3)
+        self.assertEqual(r1["cake_weight"], "1.0kg")
+        self.assertEqual(r5["cake_weight"], "0.15kg")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -321,6 +321,53 @@ class TestGuardrailsAndAPI(unittest.TestCase):
             else:
                 os.environ["GEMINI_MODEL"] = prev_model
 
+    def test_19_operator_api_key_and_http_400_validation(self):
+        """HTTP search returns 400 on SQLi/malicious queries, and OPERATOR_API_KEY gates admin endpoints."""
+        if TestClient is None or app is None:
+            self.skipTest("FastAPI TestClient not installed")
+
+        with TestClient(app) as client:
+            bad_search = client.get("/api/cakes/search", params={"q": "DROP TABLE BB_ORDERS"})
+            self.assertEqual(bad_search.status_code, 400)
+
+            prev_op = os.environ.get("OPERATOR_API_KEY")
+            os.environ["OPERATOR_API_KEY"] = "judge-operator-secret-99"
+            try:
+                self.assertEqual(client.get("/api/audit/verify").status_code, 401)
+                self.assertEqual(client.get("/api/orders/masked-summary").status_code, 401)
+                self.assertEqual(
+                    client.get("/api/audit/verify", headers={"X-Operator-Key": "wrong"}).status_code,
+                    401,
+                )
+                ok_audit = client.get(
+                    "/api/audit/verify",
+                    headers={"X-Operator-Key": "judge-operator-secret-99"},
+                )
+                ok_sum = client.get(
+                    "/api/orders/masked-summary",
+                    headers={"X-Operator-Key": "judge-operator-secret-99"},
+                )
+                self.assertEqual(ok_audit.status_code, 200)
+                self.assertEqual(ok_sum.status_code, 200)
+            finally:
+                if prev_op is None:
+                    os.environ.pop("OPERATOR_API_KEY", None)
+                else:
+                    os.environ["OPERATOR_API_KEY"] = prev_op
+
+    def test_20_ip_partitioned_rate_limiter_prevents_victim_lockout(self):
+        """5 wrong guesses from an attacker IP lock only that IP, not the real buyer."""
+        engine = ChocoQueryEngine(use_llm=False)
+        for _ in range(5):
+            r = engine.tool_track_live_order(order_id=1002, phone_number="9999999999", client_ip="198.51.100.77")
+            self.assertEqual(r.get("auth_error"), "PHONE_MISMATCH")
+
+        blocked = engine.tool_track_live_order(order_id=1002, phone_number="9876543210", client_ip="198.51.100.77")
+        self.assertEqual(blocked.get("auth_error"), "TOO_MANY_ATTEMPTS")
+
+        legitimate = engine.tool_track_live_order(order_id=1002, phone_number="+91 9876543210", client_ip="203.0.113.10")
+        self.assertEqual(legitimate["ORDER_ID"], 1002)
+
 
 if __name__ == "__main__":
     unittest.main()

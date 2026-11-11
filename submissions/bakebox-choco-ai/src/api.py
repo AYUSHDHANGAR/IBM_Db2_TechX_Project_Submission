@@ -13,6 +13,7 @@ Exposes hardened REST endpoints + self-contained playground (`/demo`):
 9. POST /api/orders/{order_id}/refund     : Phone-authenticated Happiness Guarantee + Audit Log
 10. GET /api/audit/verify                 : Forensic verification of SHA-256 hash-chained BB_AUDIT_LOG
 """
+import hmac
 import os
 import sys
 import threading
@@ -25,14 +26,17 @@ if _pkg_root not in sys.path:
     sys.path.insert(0, _pkg_root)
 
 try:
-    from fastapi import FastAPI, HTTPException, Path as FPath, Query
+    from fastapi import FastAPI, Header, HTTPException, Path as FPath, Query, Request
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import HTMLResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
     from pydantic import BaseModel, Field
 except ImportError:
     FastAPI = None
+    Header = lambda default=None, **kwargs: default
     HTTPException = None
+    Request = Any
     HTMLResponse = None
+    JSONResponse = None
     Query = lambda default=..., **kwargs: default
     FPath = lambda default=..., **kwargs: default
     BaseModel = object
@@ -48,11 +52,23 @@ from src.order_engine import (
     verify_audit_chain,
 )
 from src.query_engine import ChocoQueryEngine
-from src.security import check_prompt_security, validate_session_id
+from src.security import check_prompt_security, extract_client_ip, validate_session_id
 
 START_TIME = time.time()
 engine_instance: Optional[ChocoQueryEngine] = None
 _engine_lock = threading.Lock()
+
+
+def _require_operator_key(x_operator_key: Optional[str] = None) -> None:
+    """Enforce `X-Operator-Key` header verification when `OPERATOR_API_KEY` is configured."""
+    expected = (os.getenv("OPERATOR_API_KEY") or "").strip()
+    if not expected or expected == "your_operator_api_key_here":
+        return
+    supplied = x_operator_key.strip() if isinstance(x_operator_key, str) else ""
+    if not supplied or not hmac.compare_digest(supplied, expected):
+        if HTTPException is not None:
+            raise HTTPException(status_code=401, detail="Missing or invalid X-Operator-Key header.")
+        raise PermissionError("Missing or invalid X-Operator-Key header.")
 
 
 def get_engine() -> ChocoQueryEngine:
@@ -189,7 +205,7 @@ def get_health_status() -> Dict[str, Any]:
     }
 
 
-def chat_endpoint(req: ChatRequest) -> ChatResponse:
+def chat_endpoint(req: ChatRequest, request: Request = None) -> ChatResponse:
     """Process customer natural language chat through CHOCO AI with security guardrails."""
     try:
         clean_session_id = validate_session_id(req.session_id)
@@ -213,7 +229,7 @@ def chat_endpoint(req: ChatRequest) -> ChatResponse:
         )
 
     engine = get_engine()
-    result = engine.query(req.message, session_id=clean_session_id)
+    result = engine.query(req.message, session_id=clean_session_id, client_ip=extract_client_ip(request))
     cards = [
         CakeCardSchema(
             name=card.get("name", "Artisan Cake"),
@@ -299,8 +315,11 @@ def post_create_order(req: OrderCreateRequest) -> Dict[str, Any]:
         )
 
 
-def get_masked_order_summary() -> Dict[str, Any]:
+def get_masked_order_summary(
+    x_operator_key: Optional[str] = Header(default=None, alias="X-Operator-Key"),
+) -> Dict[str, Any]:
     """Read `V_MASKED_BAKERY_ORDERS` view inside IBM Db2 (never exposes raw customer PII)."""
+    _require_operator_key(x_operator_key)
     with db_session() as conn:
         rows = execute_query(
             conn,
@@ -312,12 +331,17 @@ def get_masked_order_summary() -> Dict[str, Any]:
 def get_order_tracking(
     order_id: int = FPath(..., ge=1, description="Numeric Order ID"),
     phone: Optional[str] = Query(None, min_length=10, max_length=20, description="Registered 10-digit mobile number"),
+    request: Request = None,
 ) -> Dict[str, Any]:
     """Retrieve verified order tracking with 2FA phone verification and PII boundary masking."""
     if not isinstance(order_id, int) or order_id <= 0:
         raise ValueError("order_id must be a positive integer.")
     engine = get_engine()
-    order = engine.tool_track_live_order(order_id=order_id, phone_number=phone)
+    order = engine.tool_track_live_order(
+        order_id=order_id,
+        phone_number=phone,
+        client_ip=extract_client_ip(request),
+    )
     if not order:
         return {"status": "ORDER_NOT_FOUND", "message": f"Order #{order_id} not found."}
     return order
@@ -326,6 +350,7 @@ def get_order_tracking(
 def post_refund_request(
     order_id: int = FPath(..., ge=1, description="Numeric Order ID"),
     req: Optional[RefundRequest] = None,
+    request: Request = None,
 ) -> Dict[str, Any]:
     """Evaluate Happiness Guarantee refund with 2FA phone verification and atomic audit log."""
     phone = req.phone if req else ""
@@ -337,11 +362,15 @@ def post_refund_request(
             reason=reason,
             customer_phone=phone,
             require_phone_auth=True,
+            client_ip=extract_client_ip(request),
         )
 
 
-def get_audit_verification() -> Dict[str, Any]:
+def get_audit_verification(
+    x_operator_key: Optional[str] = Header(default=None, alias="X-Operator-Key"),
+) -> Dict[str, Any]:
     """Verify full cryptographic integrity of `BB_AUDIT_LOG` hash chain."""
+    _require_operator_key(x_operator_key)
     with db_session() as conn:
         is_valid, compromised_id, details = verify_audit_chain(conn)
         cnt_rows = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_AUDIT_LOG", ())
@@ -351,7 +380,7 @@ def get_audit_verification() -> Dict[str, Any]:
         "chain_intact": is_valid,
         "total_records": total_records,
         "compromised_log_id": compromised_id,
-        "details": details or "All cryptographic SHA-256 links verified.",
+        "details": details or "All cryptographic HMAC-SHA256 links verified.",
     }
 
 
@@ -367,8 +396,12 @@ def serve_demo_ui() -> Any:
 if FastAPI is not None:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        get_engine()
-        yield
+        eng = get_engine()
+        try:
+            yield
+        finally:
+            if getattr(eng, "vector_store", None) is not None and hasattr(eng.vector_store, "close"):
+                eng.vector_store.close()
 
     _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:8000")
     _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
@@ -377,16 +410,20 @@ if FastAPI is not None:
     app = FastAPI(
         title="BAKEBOX Choco AI — IBM Db2 Autonomous Bakery Management API",
         description="Official REST API for BAKEBOX Choco AI (IBM Db2 TechX Summit 2026).",
-        version="2.2.0",
+        version="2.3.0",
         lifespan=lifespan,
     )
+
+    @app.exception_handler(ValueError)
+    async def value_error_exception_handler(request: Request, exc: ValueError):
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     app.add_middleware(
         CORSMiddleware,
         allow_origins=_allowed_origins,
         allow_credentials=_allow_creds,
         allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type", "Authorization"],
+        allow_headers=["Content-Type", "Authorization", "X-Operator-Key"],
     )
 
     app.get("/", tags=["Health"])(get_health_status)

@@ -169,6 +169,7 @@ def init_relational_tables(conn) -> None:
         ("Index IDX_BB_RECIPE_CAKE", "CREATE INDEX IDX_BB_RECIPE_CAKE ON BB_RECIPES(cake_id)"),
         ("Index IDX_BB_COMP_PARENT", "CREATE INDEX IDX_BB_COMP_PARENT ON BB_INGREDIENT_COMPONENTS(parent_ingredient_id)"),
         ("Index IDX_BB_BUF_SESSION", "CREATE INDEX IDX_BB_BUF_SESSION ON BB_USER_CONVERSATION_BUFFER(session_id)"),
+        ("Sequence SEQ_BB_ORDER_ID", "CREATE SEQUENCE SEQ_BB_ORDER_ID AS INT START WITH 1105 INCREMENT BY 1 NO CACHE"),
     ]
     for label, sql in ddl_objects:
         _create_object_safe(conn, label, sql)
@@ -234,6 +235,7 @@ def _seed_relational_data(conn) -> None:
         (104, "Maraschino Cherries", 0.20, "kg"),
         (105, "Fresh Milk Solids (Mawa)", 10.00, "kg"),
         (106, "Whipped Dairy Cream", 6.00, "kg"),
+        (107, "Spiced Paneer Masala Filling", 15.00, "kg"),
     ]
     for iid, iname, iqty, iunit in seed_inventory:
         chk = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_INVENTORY WHERE ingredient_id = ?", (iid,))
@@ -250,8 +252,11 @@ def _seed_relational_data(conn) -> None:
         (2, 101, "Khoaa Base (Eggless)", 0.30),
         (2, 102, "Belgian Dark Cocoa", 0.20),
         (2, 104, "Maraschino Cherries", 0.50),
+        (3, 101, "Khoaa Base (Eggless)", 0.30),
+        (3, 106, "Whipped Dairy Cream", 0.25),
         (4, 101, "Khoaa Base (Eggless)", 0.50),
         (4, 103, "Cream Cheese Frosting", 0.40),
+        (5, 107, "Spiced Paneer Masala Filling", 0.10),
     ]
     chk_rec = execute_query(conn, "SELECT COUNT(*) AS CNT FROM BB_RECIPES", ())
     if not chk_rec or chk_rec[0]["CNT"] == 0:
@@ -503,12 +508,17 @@ def run_ingestion() -> None:
             text_nodes.append(node)
         print(f"  -> Generated embeddings for {len(text_nodes)} knowledge nodes.")
 
-        print("\nStep 4: Ingesting vectors into 'BB_CHUNKS_VECTOR'...")
+        print("\nStep 4: Idempotently syncing vectors into 'BB_CHUNKS_VECTOR'...")
         vs = BakeboxDb2VectorStore(
             table_name="BB_CHUNKS_VECTOR",
             embed_dim=384,
             distance_strategy=DistanceStrategy.COSINE,
         )
+        for d in docs:
+            try:
+                vs.delete_document(d["id"])
+            except Exception:
+                pass
         vs.add_nodes(text_nodes)
         print("  -> Ingestion complete!")
     finally:

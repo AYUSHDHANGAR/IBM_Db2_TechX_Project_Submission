@@ -141,6 +141,21 @@ class MockDb2Cursor:
 
             if "RECIPE_BOM" in sql_upper:
                 return self._exec_recipe_bom(params)
+            if "NEXT VALUE FOR SEQ_BB_ORDER_ID" in sql_upper:
+                self.connection.begin_tx()
+                max_existing = max(self.connection.tables["BB_ORDERS"].keys(), default=1104) + 1
+                nxt = max(self.connection._order_id_seq, max_existing)
+                self.connection._order_id_seq = nxt + 1
+                self.description = [("NEXT_ORDER_ID", "INT")]
+                self._results = [(nxt,)]
+                self.rowcount = 1
+                return self
+            if "COALESCE(MAX(ORDER_ID)" in sql_upper:
+                max_existing = max(self.connection.tables["BB_ORDERS"].keys(), default=1104)
+                self.description = [("NEXT_ORDER_ID", "INT")]
+                self._results = [(max_existing + 1,)]
+                self.rowcount = 1
+                return self
             if "SELECT COUNT(*) AS CNT FROM" in sql_upper:
                 return self._exec_count(sql_upper, params)
             if sql_upper.startswith("CALL SP_RESERVE_CAKE_STOCK"):
@@ -184,8 +199,13 @@ class MockDb2Cursor:
             return self
 
     def _exec_recipe_bom(self, params: Tuple) -> "MockDb2Cursor":
-        cake_id = params[0] if params else 1
-        bom_results = self.connection.get_recipe_bom(cake_id)
+        if len(params) >= 2:
+            qty = int(round(float(params[0])))
+            cake_id = int(params[1])
+        else:
+            qty = 1
+            cake_id = int(params[0]) if params else 1
+        bom_results = self.connection.get_recipe_bom(cake_id, quantity=max(1, qty))
         self.description = [
             ("INGREDIENT_NAME", "VARCHAR"),
             ("REQUIRED_QTY", "DECIMAL"),
@@ -565,6 +585,7 @@ class MockDb2Connection:
     def _initialize(self) -> None:
         self.lock = threading.RLock()
         self._tx_snapshot: Optional[Dict[str, Any]] = None
+        self._order_id_seq: int = 1105
         self.last_inserted_order_id: int = 1104
         self.tables: Dict[str, Any] = {
             "BB_CAKES": {
@@ -572,6 +593,7 @@ class MockDb2Connection:
                 2: {"CAKE_ID": 2, "NAME": "Black Forest Classic Cherry Gateau", "SKU_ID": "BB-BLK-01-05kg", "STOCK_QTY": 1, "PRICE": 249.0, "IS_EGGLESS_AVAILABLE": 1},
                 3: {"CAKE_ID": 3, "NAME": "Pineapple Classic Spiral Mirror", "SKU_ID": "BB-PIN-01-05kg", "STOCK_QTY": 0, "PRICE": 249.0, "IS_EGGLESS_AVAILABLE": 1},
                 4: {"CAKE_ID": 4, "NAME": "Red Velvet Heart Love Affair", "SKU_ID": "BB-RED-02-1kg", "STOCK_QTY": 4, "PRICE": 649.0, "IS_EGGLESS_AVAILABLE": 1},
+                5: {"CAKE_ID": 5, "NAME": "Mathura Oven Fresh Paneer Patty", "SKU_ID": "BB-SNK-01-PTY", "STOCK_QTY": 20, "PRICE": 35.0, "IS_EGGLESS_AVAILABLE": 1},
             },
             "BB_INVENTORY": {
                 101: {"INGREDIENT_ID": 101, "NAME": "Khoaa Base (Eggless)", "STOCK_QTY": 12.0},
@@ -580,6 +602,7 @@ class MockDb2Connection:
                 104: {"INGREDIENT_ID": 104, "NAME": "Maraschino Cherries", "STOCK_QTY": 0.2},
                 105: {"INGREDIENT_ID": 105, "NAME": "Fresh Milk Solids (Mawa)", "STOCK_QTY": 10.0},
                 106: {"INGREDIENT_ID": 106, "NAME": "Whipped Dairy Cream", "STOCK_QTY": 6.0},
+                107: {"INGREDIENT_ID": 107, "NAME": "Spiced Paneer Masala Filling", "STOCK_QTY": 15.0},
             },
             "BB_INGREDIENT_COMPONENTS": {
                 101: [{"COMPONENT_ID": 105, "COMPONENT_NAME": "Fresh Milk Solids (Mawa)", "QTY_RATIO": 0.65}],
@@ -595,9 +618,16 @@ class MockDb2Connection:
                     {"CAKE_ID": 2, "INGREDIENT_NAME": "Belgian Dark Cocoa", "QTY_NEEDED": 0.2, "INGREDIENT_ID": 102},
                     {"CAKE_ID": 2, "INGREDIENT_NAME": "Maraschino Cherries", "QTY_NEEDED": 0.5, "INGREDIENT_ID": 104},
                 ],
+                3: [
+                    {"CAKE_ID": 3, "INGREDIENT_NAME": "Khoaa Base (Eggless)", "QTY_NEEDED": 0.3, "INGREDIENT_ID": 101},
+                    {"CAKE_ID": 3, "INGREDIENT_NAME": "Whipped Dairy Cream", "QTY_NEEDED": 0.25, "INGREDIENT_ID": 106},
+                ],
                 4: [
                     {"CAKE_ID": 4, "INGREDIENT_NAME": "Khoaa Base (Eggless)", "QTY_NEEDED": 0.5, "INGREDIENT_ID": 101},
                     {"CAKE_ID": 4, "INGREDIENT_NAME": "Cream Cheese Frosting", "QTY_NEEDED": 0.4, "INGREDIENT_ID": 103},
+                ],
+                5: [
+                    {"CAKE_ID": 5, "INGREDIENT_NAME": "Spiced Paneer Masala Filling", "QTY_NEEDED": 0.1, "INGREDIENT_ID": 107},
                 ],
             },
             "BB_ORDERS": {
@@ -647,12 +677,13 @@ class MockDb2Connection:
         with self.lock:
             self._initialize()
 
-    def get_recipe_bom(self, cake_id: int) -> List[Dict[str, Any]]:
+    def get_recipe_bom(self, cake_id: int, quantity: int = 1) -> List[Dict[str, Any]]:
         """Emulate multi-level Recursive BOM CTE with 4-decimal precision matching Db2."""
+        scale = max(1, int(quantity))
         recipes = self.tables["BB_RECIPES"].get(cake_id, [])
         components_map = self.tables.get("BB_INGREDIENT_COMPONENTS", {})
         results: List[Dict[str, Any]] = []
-        queue = [(1, r["INGREDIENT_ID"], r["INGREDIENT_NAME"], float(r["QTY_NEEDED"])) for r in recipes]
+        queue = [(1, r["INGREDIENT_ID"], r["INGREDIENT_NAME"], round(float(r["QTY_NEEDED"]) * scale, 4)) for r in recipes]
 
         while queue:
             depth, ing_id, ing_name, req_qty = queue.pop(0)

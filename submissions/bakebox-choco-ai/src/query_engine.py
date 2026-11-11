@@ -19,7 +19,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -260,15 +260,39 @@ class ChocoQueryEngine:
             rrf_k=60,
         )
 
+    def _hydrate_session_from_db2(self, session_id: str, sess: SessionBufferMemory) -> None:
+        """Restore persisted conversation turns from IBM Db2 BB_USER_CONVERSATION_BUFFER on cache miss."""
+        try:
+            rows = self.get_persisted_history(session_id)
+        except Exception:
+            return
+        pending_user: Optional[Tuple[str, str]] = None
+        for row in rows:
+            role = str(row.get("ROLE", "")).lower()
+            content = str(row.get("CONTENT", ""))
+            crag_status = str(row.get("CRAG_STATUS", "GENERAL"))
+            if role == "user":
+                pending_user = (content, crag_status)
+            elif role == "assistant" and pending_user is not None:
+                sess.add_turn(pending_user[0], content, crag_status)
+                pending_user = None
+
     def get_or_create_session(self, session_id: str) -> SessionBufferMemory:
-        """Thread-safely retrieve/create isolated session buffer with TTL eviction."""
+        """Thread-safely retrieve/create isolated session buffer with TTL eviction & Db2 hydration."""
         now = time.time()
         with self._session_lock:
             expired = [sid for sid, sess in self.sessions.items() if sess.is_expired(now)]
             for sid in expired:
                 del self.sessions[sid]
+            existing = self.sessions.get(session_id)
+            if existing is not None:
+                return existing
+
+        fresh = SessionBufferMemory(session_id=session_id)
+        self._hydrate_session_from_db2(session_id, fresh)
+        with self._session_lock:
             if session_id not in self.sessions:
-                self.sessions[session_id] = SessionBufferMemory(session_id=session_id)
+                self.sessions[session_id] = fresh
             return self.sessions[session_id]
 
     def _persist_turn_db2(self, session_id: str, role: str, content: str, ui_cards: Optional[list] = None, crag_status: str = "VERIFIED") -> None:
@@ -332,7 +356,11 @@ class ChocoQueryEngine:
 
         def track_live_order(order_id: int, phone_number: str = "") -> dict:
             """Check real-time order status in Db2 BB_ORDERS/BB_ORDER_ITEMS with 2FA phone verification."""
-            res = engine_self.tool_track_live_order(order_id=order_id, phone_number=phone_number or None)
+            res = engine_self.tool_track_live_order(
+                order_id=order_id,
+                phone_number=phone_number or None,
+                client_ip=str(call_state.get("client_ip", "local")),
+            )
             call_state["track_live_order"] = res
             call_state["last_intent"] = "ORDER_TRACKING"
             call_state.setdefault("tools_called", []).append("track_live_order")
@@ -346,9 +374,9 @@ class ChocoQueryEngine:
             call_state.setdefault("tools_called", []).append("get_store_policy_or_advisory")
             return policy
 
-        def check_cake_ingredients_bom(cake_id: int) -> dict:
-            """Run IBM Db2 Recursive Bill-of-Materials CTE to verify raw ingredient availability."""
-            res = engine_self.tool_check_bom_availability(cake_id=cake_id)
+        def check_cake_ingredients_bom(cake_id: int, quantity: int = 1) -> dict:
+            """Run IBM Db2 Recursive Bill-of-Materials CTE to verify quantity-scaled ingredient availability."""
+            res = engine_self.tool_check_bom_availability(cake_id=cake_id, quantity=quantity)
             call_state["check_cake_ingredients_bom"] = res
             call_state["last_intent"] = "BOM_AVAILABILITY"
             call_state.setdefault("tools_called", []).append("check_cake_ingredients_bom")
@@ -426,15 +454,20 @@ class ChocoQueryEngine:
     # ==========================================================================
     # AGENTIC TOOL 2: Sargable Indexed Order Tracking with 2FA & PII Masking
     # ==========================================================================
-    def tool_track_live_order(self, order_id: Optional[int] = None, phone_number: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def tool_track_live_order(
+        self,
+        order_id: Optional[int] = None,
+        phone_number: Optional[str] = None,
+        client_ip: str = "local",
+    ) -> Optional[Dict[str, Any]]:
         """
         Query IBM Db2 relational tables using sargable indexed `phone_last10` equality,
-        2FA phone barrier, brute-force lockout protection, and boundary PII masking.
+        2FA phone barrier, IP+order brute-force lockout protection, and boundary PII masking.
         """
         if not order_id and not phone_number:
             return None
 
-        if order_id is not None and order_auth_limiter.is_locked(order_id):
+        if order_id is not None and order_auth_limiter.is_locked(order_id, client_ip=client_ip):
             return {"auth_error": "TOO_MANY_ATTEMPTS", "order_id": order_id}
 
         phone_10 = extract_phone_last10(phone_number)
@@ -453,10 +486,10 @@ class ChocoQueryEngine:
                 if not order_rows:
                     check_id = execute_query(conn, "SELECT order_id FROM BB_ORDERS WHERE order_id = ?", (order_id,))
                     if check_id:
-                        order_auth_limiter.record_failure(order_id)
+                        order_auth_limiter.record_failure(order_id, client_ip=client_ip)
                         return {"auth_error": "PHONE_MISMATCH", "order_id": order_id}
                     return None
-                order_auth_limiter.reset(order_id)
+                order_auth_limiter.reset(order_id, client_ip=client_ip)
             else:
                 sql_order = (
                     "SELECT order_id, user_id, customer_name, customer_phone, order_type, "
@@ -499,17 +532,18 @@ class ChocoQueryEngine:
     # ==========================================================================
     # AGENTIC TOOL 4: Recursive BOM Availability Check
     # ==========================================================================
-    def tool_check_bom_availability(self, cake_id: int) -> Dict[str, Any]:
-        """Execute multi-level Recursive BOM CTE against IBM Db2 BB_INVENTORY."""
+    def tool_check_bom_availability(self, cake_id: int, quantity: int = 1) -> Dict[str, Any]:
+        """Execute quantity-scaled multi-level Recursive BOM CTE against IBM Db2 BB_INVENTORY."""
+        safe_qty = max(1, int(quantity))
         with db_session() as conn:
-            bom = check_recipe_bom_availability(conn, cake_id)
-            bakeable, missing = is_cake_bakeable(conn, cake_id)
-        return {"cake_id": cake_id, "bakeable": bakeable, "missing_ingredients": missing, "bom_tree": bom}
+            bom = check_recipe_bom_availability(conn, cake_id, quantity=safe_qty)
+            bakeable, missing = is_cake_bakeable(conn, cake_id, quantity=safe_qty)
+        return {"cake_id": cake_id, "quantity": safe_qty, "bakeable": bakeable, "missing_ingredients": missing, "bom_tree": bom}
 
     # ==========================================================================
     # MAIN CONVERSATIONAL DISPATCHER WITH MEMORY & GUARDRAILS
     # ==========================================================================
-    def query(self, user_message: str, session_id: str = "default_user_session") -> Dict[str, Any]:
+    def query(self, user_message: str, session_id: str = "default_user_session", client_ip: str = "local") -> Dict[str, Any]:
         """Process customer messages with guardrails, isolated sessions, and Self-RAG checks."""
         session_id = validate_session_id(session_id)
         is_safe, flag_reason = check_prompt_security(user_message)
@@ -532,7 +566,7 @@ class ChocoQueryEngine:
 
         # 0. Request-scoped Native Gemini Agentic Tool Calling
         if self.use_llm:
-            call_state: Dict[str, Any] = {}
+            call_state: Dict[str, Any] = {"client_ip": client_ip}
             tools = self._build_request_tools(call_state, session_id)
             history_ctx = session_memory.get_context_summary(delimited=True)
             prompt_payload = f"{history_ctx}\n\n{wrapped_user_message}" if history_ctx else wrapped_user_message
@@ -579,7 +613,80 @@ class ChocoQueryEngine:
         )
 
         if is_order_tracking:
-            return self._handle_order_tracking_turn(session_id, session_memory, user_message, order_id_match, phone_number)
+            return self._handle_order_tracking_turn(
+                session_id, session_memory, user_message, order_id_match, phone_number, client_ip=client_ip
+            )
+
+        # Deterministic structured order placement (only when explicit cake_id, phone & name are provided)
+        checkout_cake_match = re.search(r"(?:cake\s*#?|#)\s*(\d{1,3})\b", q_lower)
+        name_match = re.search(r"(?:name\s*[:=]\s*|for\s+)([a-zA-Z][a-zA-Z\s]{1,40})", user_message)
+        if (
+            checkout_cake_match
+            and phone_number
+            and name_match
+            and any(k in q_lower for k in ("place order", "confirm order", "book order"))
+        ):
+            cid = int(checkout_cake_match.group(1))
+            q_match = re.search(r"(\d{1,2})\s*(?:cakes?|units?|pcs?|qty)", q_lower)
+            qty = max(1, min(20, int(q_match.group(1)))) if q_match else 1
+            cname = name_match.group(1).strip()
+            with db_session() as conn:
+                placed = place_verified_order_atomic(
+                    conn, cake_id=cid, customer_name=cname, customer_phone=phone_number,
+                    quantity=qty, session_id=session_id,
+                )
+            reply = f"Radhe Radhe ji! {placed.get('message', 'Order processed.')}"
+            reply = self.self_rag.verify_and_correct(reply, user_message)
+            self._record_turn(session_id, session_memory, user_message, reply, "ORDER_PLACED")
+            return {
+                "reply": reply,
+                "ui_cards": [],
+                "intent": "ORDER_PLACED",
+                "session_id": session_id,
+                "placed_order": placed,
+            }
+
+        bom_keywords = ("bom", "ingredient", "ingredients", "raw material", "samagri", "bakeable")
+        if any(k in q_lower for k in bom_keywords):
+            cid_match = re.search(r"(?:cake\s*#?|#)\s*(\d{1,3})\b", q_lower)
+            if cid_match:
+                cid = int(cid_match.group(1))
+            elif "black forest" in q_lower:
+                cid = 2
+            elif "pineapple" in q_lower:
+                cid = 3
+            elif "heart" in q_lower:
+                cid = 4
+            elif "patty" in q_lower or "paneer" in q_lower:
+                cid = 5
+            else:
+                cid = 1
+            q_match = re.search(r"(\d{1,2})\s*(?:cakes?|units?|pcs?|qty)", q_lower)
+            qty = max(1, min(20, int(q_match.group(1)))) if q_match else 1
+            bom_res = self.tool_check_bom_availability(cake_id=cid, quantity=qty)
+            tree_lines = [
+                f"• {row['INGREDIENT_NAME']}: need {row['REQUIRED_QTY']} | stock {row['CURRENT_STOCK']} ({row['AVAILABILITY']})"
+                for row in bom_res.get("bom_tree", [])
+            ]
+            status_line = (
+                f"Cake #{cid} (x{qty}) bake karne ke liye sabhi raw ingredients IN STOCK hain!"
+                if bom_res.get("bakeable")
+                else f"Cake #{cid} (x{qty}) ke liye raw ingredient shortage hai: {', '.join(bom_res.get('missing_ingredients', []))}."
+            )
+            reply = (
+                "Radhe Radhe ji! IBM Db2 Recursive BOM CTE report:\n"
+                + status_line
+                + ("\n" + "\n".join(tree_lines) if tree_lines else "")
+            )
+            reply = self.self_rag.verify_and_correct(reply, user_message)
+            self._record_turn(session_id, session_memory, user_message, reply, "BOM_AVAILABILITY")
+            return {
+                "reply": reply,
+                "ui_cards": [],
+                "intent": "BOM_AVAILABILITY",
+                "session_id": session_id,
+                "bom_details": bom_res,
+            }
 
         general_keywords = [
             "who are you", "tum kaun ho", "aap kaun ho", "what is choco", "what is bakebox",
@@ -656,6 +763,7 @@ class ChocoQueryEngine:
         user_message: str,
         order_id_match: Optional[re.Match],
         phone_number: Optional[str],
+        client_ip: str = "local",
     ) -> Dict[str, Any]:
         order_id = int(order_id_match.group(1)) if order_id_match else None
         if not order_id and not phone_number:
@@ -667,7 +775,7 @@ class ChocoQueryEngine:
             self._record_turn(session_id, session_memory, user_message, reply, "ORDER_TRACKING_PROMPT")
             return {"reply": reply, "ui_cards": [], "intent": "ORDER_TRACKING_PROMPT", "session_id": session_id}
 
-        order = self.tool_track_live_order(order_id=order_id, phone_number=phone_number)
+        order = self.tool_track_live_order(order_id=order_id, phone_number=phone_number, client_ip=client_ip)
         if order and order.get("auth_error") == "TOO_MANY_ATTEMPTS":
             reply = f"Radhe Radhe ji! Security alert: Order #{order_id} ke liye excessive failed verification attempts block kar diye gaye hain."
             self._record_turn(session_id, session_memory, user_message, reply, "ORDER_AUTH_LOCKED")

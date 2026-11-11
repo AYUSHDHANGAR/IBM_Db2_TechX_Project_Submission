@@ -55,28 +55,33 @@ DEMO_HTML = """<!DOCTYPE html>
       <input id="ordName" value="Aditi Agrawal" placeholder="Customer Name" />
       <input id="ordPhone" value="+91 9876501234" placeholder="10-digit Mobile" />
       <input id="ordCakeId" type="number" value="1" min="1" placeholder="Cake ID" />
+      <input id="ordQty" type="number" value="1" min="1" max="20" placeholder="Quantity" />
       <button onclick="placeOrder()">Place Atomic Order</button>
-      <pre id="ordOut">Executes BOM check -> SP_RESERVE_CAKE_STOCK -> BB_ORDERS -> BB_AUDIT_LOG.</pre>
+      <pre id="ordOut">Executes BOM check (scaled by qty) -> SP_RESERVE_CAKE_STOCK -> SEQ_BB_ORDER_ID -> BB_ORDERS -> BB_AUDIT_LOG.</pre>
     </div>
 
     <div class="card">
       <h2>4. 2FA Order Tracking &amp; Audit Chain Verify</h2>
       <input id="trkId" type="number" value="1002" placeholder="Order ID" />
       <input id="trkPhone" value="+91 9876543210" placeholder="Registered Phone" />
+      <input id="opKey" type="password" value="" placeholder="X-Operator-Key (if configured in .env)" />
       <button onclick="trackOrder()">Track Order (Masked PII)</button>
-      <button onclick="verifyAudit()" style="background:#10b981;margin-top:6px;">Verify SHA-256 BB_AUDIT_LOG Chain</button>
+      <button onclick="verifyAudit()" style="background:#10b981;margin-top:6px;">Verify HMAC-SHA256 BB_AUDIT_LOG Chain</button>
       <pre id="trkOut">Test #1002 with +91 9876543210 (try wrong phone to trigger auth failure log).</pre>
     </div>
   </div>
 
 <script>
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
 async function refreshHealth() {
   const r = await fetch('/api/health');
   const d = await r.json();
   document.getElementById('healthBanner').innerHTML =
-    `<span class="badge">${d.db2_mode}</span>` +
-    `<span class="badge">Catalog: ${d.catalog_items_indexed} nodes</span>` +
-    `<span class="badge">Audit Valid: ${d.audit_chain_intact}</span>`;
+    `<span class="badge">${escapeHtml(d.db2_mode)}</span>` +
+    `<span class="badge">Catalog: ${escapeHtml(d.catalog_items_indexed)} nodes</span>` +
+    `<span class="badge">Audit Valid: ${escapeHtml(d.audit_chain_intact)}</span>`;
 }
 async function sendChat() {
   const r = await fetch('/api/chat', {
@@ -98,7 +103,7 @@ async function placeOrder() {
       cake_id: parseInt(ordCakeId.value, 10),
       customer_name: ordName.value,
       customer_phone: ordPhone.value,
-      quantity: 1
+      quantity: parseInt(ordQty.value || '1', 10)
     })
   });
   ordOut.textContent = JSON.stringify(await r.json(), null, 2);
@@ -109,7 +114,8 @@ async function trackOrder() {
   trkOut.textContent = JSON.stringify(await r.json(), null, 2);
 }
 async function verifyAudit() {
-  const r = await fetch('/api/audit/verify');
+  const headers = opKey.value ? {'X-Operator-Key': opKey.value} : {};
+  const r = await fetch('/api/audit/verify', { headers });
   trkOut.textContent = JSON.stringify(await r.json(), null, 2);
 }
 refreshHealth();

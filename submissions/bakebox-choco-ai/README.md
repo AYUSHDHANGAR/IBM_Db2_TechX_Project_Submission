@@ -1,26 +1,26 @@
 # BAKEBOX-AI: Autonomous AI Bakery Management & Customer Support
 ### CHOCO AI — Hybrid RAG, Multi-Level Recursive BOM & ACID Concurrency on IBM Db2 12.1
 
-[![Tests](https://img.shields.io/badge/tests-73%20passed%20%7C%200%20failed-brightgreen)](#testing--verification)
+[![Tests](https://img.shields.io/badge/tests-78%20passed%20%7C%201%20opt--in%20live--Db2-brightgreen)](#testing--verification)
 [![IBM Db2](https://img.shields.io/badge/IBM%20Db2-LUW%2012.1%20Vector%20%2B%20SQL%20PL-054ADA)](#ibm-db2-integration)
 [![FastAPI](https://img.shields.io/badge/FastAPI-10%20REST%20Routes%20%2B%20%2Fdemo%20UI-009688)](#rest-api--interactive-playground)
-[![Security](https://img.shields.io/badge/Security-RBAC%20%7C%202FA%20%7C%20SHA--256%20Audit-orange)](#security--privacy-architecture)
+[![Security](https://img.shields.io/badge/Security-RBAC%20%7C%202FA%20%7C%20HMAC--SHA256-orange)](#security--privacy-architecture)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%2B-blue)](#prerequisites)
 
-> **One-Line Pitch:** **BAKEBOX-AI (CHOCO AI)** turns **IBM Db2 LUW 12.1** into a single unified engine for AI customer guidance and ACID bakery operations—built for our 20-year family bakery (*Shri Ram Baker's*, Mathura). It combines native Db2 `VECTOR(384, FLOAT32)` similarity search + BSON metadata pushdown (`DB2LlamaVS`) with 3-Way Reciprocal Rank Fusion ($k=60$), Hinglish CRAG & Self-RAG verification, in-database Recursive Bill-of-Materials (BOM) checks, `FOR UPDATE WITH RS` stock locking (`SP_RESERVE_CAKE_STOCK`), Db2-persisted session memory, and a SHA-256 hash-chained audit trail behind a FastAPI API and `/demo` playground.
+> **One-Line Pitch:** **BAKEBOX-AI (CHOCO AI)** turns **IBM Db2 LUW 12.1** into a single unified engine for AI customer guidance and ACID bakery operations—built for our 20-year family bakery (*Shri Ram Baker's*, Mathura). It combines native Db2 `VECTOR(384, FLOAT32)` similarity search + BSON metadata pushdown (`DB2LlamaVS`) with 3-Way Reciprocal Rank Fusion ($k=60$), Hinglish CRAG & Self-RAG verification, quantity-scaled Recursive Bill-of-Materials (BOM) CTE checks, `SEQ_BB_ORDER_ID` sequence allocation, `FOR UPDATE WITH RS` stock locking (`SP_RESERVE_CAKE_STOCK`), Db2-hydrated session memory, and a keyed HMAC-SHA256 hash-chained audit trail behind a hardened FastAPI API and `/demo` playground.
 
 ---
 
 ## Judge Quickstart (Verify in 60 Seconds — Zero Docker Required)
 
-Reviewers can run all **73 automated tests**, inspect the **30-query retrieval ablation benchmark**, and test the **interactive web playground** offline without database credentials or external API keys (backed by our thread-safe, ACID snapshot-rollback PEP 249 `MockDb2Connection` and `_OfflineMockVectorStore` cosine simulator):
+Reviewers can run all **78 offline automated tests** (`+1` opt-in live-Db2 smoke test), inspect the **30-query retrieval ablation benchmark across 25 knowledge nodes**, and test the **interactive web playground** offline without database credentials or external API keys (backed by our thread-safe, ACID snapshot-rollback PEP 249 `MockDb2Connection` and `_OfflineMockVectorStore` cosine simulator):
 
 ```bash
 # 1. Enter the submission directory & install dependencies
 cd submissions/bakebox-choco-ai
 pip install -r requirements.txt
 
-# 2. Run all 73 unit, HTTP API, concurrency, security, rollback & audit tests
+# 2. Run all unit, HTTP API, concurrency, security, rollback & audit tests (78 offline + 1 live-Db2 opt-in)
 python -m unittest discover -s tests -v
 
 # 3. Run the 30-query, 4-channel empirical retrieval ablation benchmark
@@ -64,11 +64,11 @@ uvicorn src.api:app --reload
 
 | Dimension | Weight | What Was Built & Verified | Key Files |
 | :--- | :---: | :--- | :--- |
-| **1. IBM Db2 Integration & Depth** | **25%** | Native `VECTOR(384, FLOAT32)` + `SYSTOOLS.BSON2JSON` predicate pushdown (`DB2LlamaVS`); Multi-Level Recursive BOM CTE (`WITH RECIPE_BOM UNION ALL`, `DECIMAL(10, 4)`); SQL PL Stored Procedure `SP_RESERVE_CAKE_STOCK` (`FOR UPDATE OF stock_qty WITH RS` + `WHERE CURRENT OF`); single-UOW ACID transactions; sargable `phone_last10` B-Tree index; `V_ACTIVE_BAKERY_ORDERS` & `V_MASKED_BAKERY_ORDERS` views; `BB_USER_CONVERSATION_BUFFER`; `BB_AUDIT_LOG`. | [`src/db.py`](src/db.py)<br>[`src/ingest.py`](src/ingest.py)<br>[`src/order_engine.py`](src/order_engine.py)<br>[`src/vector_store.py`](src/vector_store.py) |
-| **2. Innovation & Real-World Impact** | **20%** | Engineered for a 20-year regional Mathura bakery (*Shri Ram Baker's*, Holigate & Gosna branches) eliminating late-night lost sales, ingredient blind spots, and overselling; Hinglish CRAG query expansion + Self-RAG factual safety; one-click browser playground at `GET /demo`. | [`src/retriever.py`](src/retriever.py)<br>[`src/query_engine.py`](src/query_engine.py)<br>[`src/demo_ui.py`](src/demo_ui.py) |
-| **3. Technical Architecture & AI** | **15%** | Modular 9-file pipeline; 3-Way Reciprocal Rank Fusion ($k=60$) with cached 384-d embeddings; **Google Gemini 1.5 Flash** (`gemini-1.5-flash` via `google-genai`) with 5 request-scoped agentic tools (zero cross-session race leaks) and deterministic `--no-llm` fallback; matching [`architecture.md`](architecture.md). | [`src/query_engine.py`](src/query_engine.py)<br>[`src/api.py`](src/api.py)<br>[`architecture.md`](architecture.md) |
-| **4. Security** | **15%** | Zero committed secrets; submission-local `.env` isolation; least-privilege Db2 roles & append-only `BB_AUDIT_LOG` ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)); parameterized SQL + `validate_doc_id()` driver SQLi guard; 2FA phone auth + `OrderAuthRateLimiter` brute-force lockout + PII masking; NFKC + zero-width prompt guardrails + XML delimiters + output secret/XSS scrubbing; hardened CORS. | [`src/security.py`](src/security.py)<br>[`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)<br>[`.env.example`](.env.example) |
-| **5. Reproducibility & Code Quality** | **15%** | **73 automated tests passing (`0 errors, 0 failures`)** across concurrency, ACID rollback injection, Gemini tool schemas, HTTP `TestClient`, security, and audit integrity; strict 30-query ablation benchmark; Docker Db2 setup ([`docker-compose.yml`](docker-compose.yml)); Python 3.10–3.14 [`requirements.txt`](requirements.txt). | [`tests/`](tests/)<br>[`docker-compose.yml`](docker-compose.yml)<br>[`requirements.txt`](requirements.txt) |
+| **1. IBM Db2 Integration & Depth** | **25%** | Native `VECTOR(384, FLOAT32)` + `SYSTOOLS.BSON2JSON` predicate pushdown (`DB2LlamaVS`); Quantity-Scaled Multi-Level Recursive BOM CTE (`WITH RECIPE_BOM UNION ALL`, typed `DECIMAL(10, 4)`); `SEQ_BB_ORDER_ID` collision-free sequence; SQL PL Stored Procedure `SP_RESERVE_CAKE_STOCK` (`FOR UPDATE OF stock_qty WITH RS` + `WHERE CURRENT OF`); single-UOW ACID transactions; sargable `phone_last10` B-Tree index; `V_ACTIVE_BAKERY_ORDERS` & `V_MASKED_BAKERY_ORDERS` views; `BB_USER_CONVERSATION_BUFFER` hydration; `BB_AUDIT_LOG`. | [`src/db.py`](src/db.py)<br>[`src/ingest.py`](src/ingest.py)<br>[`src/order_engine.py`](src/order_engine.py)<br>[`src/vector_store.py`](src/vector_store.py) |
+| **2. Innovation & Real-World Impact** | **20%** | Engineered for a 20-year regional Mathura bakery (*Shri Ram Baker's*, Holigate & Gosna branches) with a **15-SKU (`25`-node) multi-flavor catalog**, eliminating late-night lost sales, raw-material blind spots, and overselling; Hinglish CRAG query expansion + Self-RAG factual safety; one-click browser playground at `GET /demo`. | [`src/retriever.py`](src/retriever.py)<br>[`src/query_engine.py`](src/query_engine.py)<br>[`src/demo_ui.py`](src/demo_ui.py) |
+| **3. Technical Architecture & AI** | **15%** | Modular 9-file pipeline; 3-Way Reciprocal Rank Fusion ($k=60$) with cached 384-d embeddings; **Google Gemini 1.5 Flash** (`gemini-1.5-flash` via `google-genai`) with 5 request-scoped agentic tools (`AutomaticFunctionCallingConfig`, zero cross-session race leaks), Db2 session cache hydration on miss, and deterministic `--no-llm` fallback (including BOM chat queries); matching [`architecture.md`](architecture.md). | [`src/query_engine.py`](src/query_engine.py)<br>[`src/api.py`](src/api.py)<br>[`architecture.md`](architecture.md) |
+| **4. Security** | **15%** | Zero committed secrets; submission-local `.env` isolation; least-privilege Db2 roles & append-only `BB_AUDIT_LOG` ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)); parameterized SQL + `validate_doc_id()` driver SQLi guard; `X-Operator-Key` admin route guard; keyed **HMAC-SHA256** audit log sealing UTC `_audit_ts`; 2FA phone auth + IP-partitioned `OrderAuthRateLimiter` + PII masking; NFKC + zero-width prompt guardrails + XML delimiters + HTTP 400 validation + output secret/XSS scrubbing; hardened CORS. | [`src/security.py`](src/security.py)<br>[`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)<br>[`.env.example`](.env.example) |
+| **5. Reproducibility & Code Quality** | **15%** | **78 offline tests passing + 1 opt-in live-Db2 smoke test** (`79` total across `7` suites, `0 errors, 0 failures`) covering concurrency, sequence allocation, scaled BOM, ACID rollback injection, Gemini tool schemas, HTTP `TestClient`, `X-Operator-Key`, IP rate limits, and audit integrity; 30-query ablation benchmark; Docker Db2 setup ([`docker-compose.yml`](docker-compose.yml)); Python 3.10–3.14 [`requirements.txt`](requirements.txt). | [`tests/`](tests/)<br>[`docker-compose.yml`](docker-compose.yml)<br>[`requirements.txt`](requirements.txt) |
 | **6. Documentation & Presentation** | **10%** | Complete [`submission.json`](submission.json), MIT [`LICENSE`](LICENSE), [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), 11 production screenshots ([`docs/screenshots/`](docs/screenshots/README.md)), video demo, and clean commit scope inside `submissions/bakebox-choco-ai/`. | [`README.md`](README.md)<br>[`submission.json`](submission.json)<br>[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
 
 ---
@@ -107,21 +107,21 @@ flowchart LR
 
 ### Schema & Database Objects Provisioned by [`src/ingest.py`](src/ingest.py)
 * **Vector Table:** `BB_CHUNKS_VECTOR` (`VECTOR(384, FLOAT32)` + `metadata BLOB` queried via `SYSTOOLS.BSON2JSON` predicate pushdown).
-* **Core Relational Tables:**
-  * `BB_ORDERS` (with normalized `phone_last10 VARCHAR(10)` indexed by `IDX_BB_ORDER_PHONE` for sargable O(log N) 2FA lookups)
-  * `BB_ORDER_ITEMS` (linked via `CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE`)
+* **Core Relational Tables & Sequence:**
+  * `BB_ORDERS` (with normalized `phone_last10 VARCHAR(10)` indexed by `IDX_BB_ORDER_PHONE` for sargable O(log N) 2FA lookups) + `SEQ_BB_ORDER_ID` collision-free Order ID sequence
+  * `BB_ORDER_ITEMS` (linked via `CONSTRAINT FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE`, storing catalog-verified item weights)
   * `BB_CAKES`, `BB_INVENTORY`, `BB_RECIPES`, `BB_INGREDIENT_COMPONENTS` (composite PK + cascading FKs for multi-level recipes)
-  * `BB_USER_CONVERSATION_BUFFER` (persists isolated multi-turn dialogue turns inside Db2)
-  * `BB_AUDIT_LOG` (cryptographically hash-chained business ledger)
+  * `BB_USER_CONVERSATION_BUFFER` (persists and rehydrates isolated multi-turn dialogue turns inside Db2)
+  * `BB_AUDIT_LOG` (keyed HMAC-SHA256 hash-chained business ledger with sealed UTC timestamps)
 * **Operational Views & Stored Procedure:**
   * `V_ACTIVE_BAKERY_ORDERS` & privacy-masked `V_MASKED_BAKERY_ORDERS`
   * `SP_RESERVE_CAKE_STOCK`: Acquires `FOR UPDATE OF stock_qty WITH RS` cursor and executes `UPDATE BB_CAKES ... WHERE CURRENT OF lock_cur`, returning `DYNAMIC RESULT SETS 1` inside the caller's Unit of Work.
 
 ### Core In-Database Execution Flow
 When placing an order via `POST /api/orders` (`place_verified_order_atomic()`):
-1. Runs **Recursive BOM CTE** (`DECIMAL(10, 4)` arithmetic up to depth 5 across `BB_RECIPES -> BB_INGREDIENT_COMPONENTS -> BB_INVENTORY`). If any raw ingredient is short (e.g., Cake #2 needing `0.50kg` *Maraschino Cherries* against `0.20kg` stock), the order is rejected cleanly.
-2. Executes `SP_RESERVE_CAKE_STOCK` under `WITH RS` lock (`commit=False`) to reserve inventory atomically without race overselling.
-3. Inserts into `BB_ORDERS` + `BB_ORDER_ITEMS` and appends `ORDER_PLACED` to `BB_AUDIT_LOG` (serialized via `LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE`), then executes a **single `conn.commit()`** (or full `conn.rollback()` on any error).
+1. Runs **Quantity-Scaled Recursive BOM CTE** (`CAST(? AS DECIMAL(10, 4))` multiplier up to depth 5 across `BB_RECIPES -> BB_INGREDIENT_COMPONENTS -> BB_INVENTORY`). If any raw ingredient is short for the requested `quantity` (e.g., Cake #2 needing `0.50kg` *Maraschino Cherries* against `0.20kg` stock, or a `30x` bulk Cake #1 order exceeding `12.0kg` *Khoaa Base*), the order is rejected cleanly.
+2. Executes `SP_RESERVE_CAKE_STOCK` under `WITH RS` lock (`commit=False`) to reserve inventory atomically without race overselling, then pulls the next unique ID from **`SEQ_BB_ORDER_ID`**.
+3. Inserts into `BB_ORDERS` + `BB_ORDER_ITEMS` and appends `ORDER_PLACED` (keyed **HMAC-SHA256** + `_audit_ts`) to `BB_AUDIT_LOG` (`LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE`), then executes a **single `conn.commit()`** (or full `conn.rollback()` on any error).
 
 ---
 
@@ -152,17 +152,18 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
 ```
 
 * **Gemini 1.5 Flash (`google-genai` SDK) + Request Isolation:** Tool callables are created per request via `_build_request_tools(call_state, session_id)` inside [`src/query_engine.py`](src/query_engine.py) with explicit `AutomaticFunctionCallingConfig`, preventing concurrent user sessions from overwriting each other's recommendations or order records.
-* **Zero-Hallucination Deterministic Fallback:** Running with `--no-llm` or without `GEMINI_API_KEY` routes the exact same Db2 tools deterministically.
+* **Db2 Session Continuity & Deterministic Parity:** Clearing RAM or restarting workers rehydrates turns cleanly from `BB_USER_CONVERSATION_BUFFER`, and running with `--no-llm` or without `GEMINI_API_KEY` routes recommendation, BOM availability (`check_cake_ingredients_bom`), policy, and tracking tools deterministically.
 
 ---
 
 ## Security & Privacy Architecture
 
-1. **Workspace-Isolated Configuration & Zero Secrets:** [`src/db.py`](src/db.py) loads only `submissions/bakebox-choco-ai/.env` (preventing unintended parent-folder `.env` inheritance), resolves Db2 passwords on-demand without module-level secret constants, and masks logs (`PWD=********`).
-2. **Least-Privilege Db2 RBAC ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)):** Separates `BAKEBOX_READER_ROLE` (catalog tables + `V_MASKED_BAKERY_ORDERS` only) from `BAKEBOX_APP_ROLE` (operational DML + `SELECT, INSERT` append-only on `BB_AUDIT_LOG`, intentionally withholding `UPDATE`/`DELETE`).
-3. **Parameterized SQL & Third-Party Driver Hardening:** All database queries use strict `?` parameter markers and sargable `phone_last10` equality. [`validate_doc_id()`](src/security.py) enforces strict identifier validation before calling `DB2LlamaVS.delete()`.
-4. **2FA Order Protection, Brute-Force Lockout & PII Masking:** Both tracking and refund endpoints enforce `order_id` + 10-digit registered mobile verification, lock out repeated failures after 5 mismatches (`OrderAuthRateLimiter`), log `REFUND_AUTH_FAILED` into `BB_AUDIT_LOG`, and mask customer PII (`R**** S*****`, `+91 ******3210`, `***, Mathura, UP (Confidential)`).
-5. **Bilingual Prompt Injection Defense & Output Scrubbing:** [`src/security.py`](src/security.py) normalizes Unicode (`NFKC`), strips invisible zero-width characters, blocks English/Hinglish jailbreaks and DDL SQL payloads, wraps untrusted text in `<customer_input>` / `<conversation_history>` XML barriers, and strips API keys or `<script>` tags from responses.
+1. **Workspace-Isolated Configuration & Zero Secrets:** [`src/db.py`](src/db.py) loads only `submissions/bakebox-choco-ai/.env` (preventing unintended parent-folder `.env` inheritance), resolves Db2 credentials and `AUDIT_HMAC_SECRET` / `OPERATOR_API_KEY` on-demand, and masks logs (`PWD=********`).
+2. **Least-Privilege Db2 RBAC ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)):** Separates `BAKEBOX_READER_ROLE` (catalog tables + `V_MASKED_BAKERY_ORDERS` only) from `BAKEBOX_APP_ROLE` (operational DML, `USAGE ON SEQUENCE SEQ_BB_ORDER_ID`, `SP_RESERVE_CAKE_STOCK`, and `SELECT, INSERT` append-only on `BB_AUDIT_LOG` without `UPDATE`/`DELETE`).
+3. **Parameterized SQL & Third-Party Driver Hardening:** All database queries use strict `?` parameter markers and sargable `phone_last10` equality. [`validate_doc_id()`](src/security.py) enforces strict identifier regex before calling upstream `DB2LlamaVS.delete()`, blocking f-string SQL injection cleanly during idempotent re-ingestion.
+4. **Operator Auth Guard & Keyed HMAC-SHA256 Audit Chain:** Setting `OPERATOR_API_KEY` enforces constant-time `X-Operator-Key` validation (`401` on unauthorized access) for `/api/orders/masked-summary` and `/api/audit/verify`; [`append_audit_log()`](src/order_engine.py) seals a UTC `_audit_ts` timestamp inside each keyed HMAC-SHA256 block.
+5. **IP-Partitioned 2FA Rate Limiter & PII Masking:** Both tracking and refund endpoints enforce `order_id` + 10-digit registered mobile verification, partition brute-force lockouts by `(client_ip, order_id)` after 5 mismatches (stopping attacker-induced lockout of real buyers), log `REFUND_AUTH_FAILED` into `BB_AUDIT_LOG`, and mask customer PII (`R**** S*****`, `+91 ******3210`, `***, Mathura, UP (Confidential)`).
+6. **Bilingual Prompt Guardrails, HTTP 400 Validation & Output Scrubbing:** [`src/security.py`](src/security.py) normalizes Unicode (`NFKC`), strips invisible zero-width characters, blocks English/Hinglish jailbreaks and DDL SQL payloads (`HTTP 400` via `@app.exception_handler(ValueError)`), wraps untrusted text in `<customer_input>` / `<conversation_history>` XML barriers, and strips API keys or `<script>` tags from responses.
 
 ---
 
@@ -188,29 +189,30 @@ submissions/bakebox-choco-ai/
 ├── README.md                    # Complete setup, engineering & verification guide
 ├── architecture.md              # Full DDL schemas, Mermaid flows, RRF & SHA-256 specs
 ├── data/
-│   ├── sample_catalog.json      # Product catalog (cakes, SKUs, bases, pricing)
+│   ├── sample_catalog.json      # 15 curated Mathura SKUs (Red Velvet, Truffle, Strawberry, Butterscotch, Patties)
 │   └── sample_orders.json       # Seed orders (#1002 BAKING, #1104 CONFIRMED)
 ├── sql/
-│   └── least_privilege_setup.sql# BAKEBOX_READER_ROLE, BAKEBOX_APP_ROLE & audit privileges
+│   └── least_privilege_setup.sql# BAKEBOX_READER_ROLE, BAKEBOX_APP_ROLE, SEQ_BB_ORDER_ID & audit privileges
 ├── src/
-│   ├── api.py                   # FastAPI REST endpoints & CORS hardening
-│   ├── db.py                    # Db2 connections, single-UOW sessions & MockDb2 engine
+│   ├── api.py                   # FastAPI REST endpoints, X-Operator-Key guard, HTTP 400 & CORS hardening
+│   ├── db.py                    # Db2 connections, single-UOW sessions, sequence & MockDb2 engine
 │   ├── demo_ui.py               # Self-contained HTML/JS playground served at GET /demo
-│   ├── ingest.py                # Idempotent DDL, SQL PL SP, views, seeding & vectors
-│   ├── order_engine.py          # Recursive BOM CTE, WITH RS lock, ACID order & audit chain
-│   ├── query_engine.py          # Agentic tool dispatcher, google-genai, Self-RAG & sessions
+│   ├── ingest.py                # Idempotent DDL, SQL PL SP, sequence, views, seeding & 25-node vectors
+│   ├── order_engine.py          # Quantity-scaled BOM CTE, WITH RS lock, HMAC-SHA256 audit & sequence order IDs
+│   ├── query_engine.py          # Agentic tool dispatcher, google-genai, Db2 hydration, Self-RAG & sessions
 │   ├── retriever.py             # 3-Way Hybrid RRF, Hinglish CRAG & cached 384-d embeddings
-│   ├── security.py              # NFKC prompt guard, doc_id/session validators, PII & limiter
+│   ├── security.py              # NFKC prompt guard, doc_id/session validators, PII & IP+order rate limiter
 │   └── vector_store.py          # Dual-mode DB2LlamaVS + offline cosine filter simulator
 ├── tests/
 │   ├── evaluate_retrieval.py    # 30-query, 4-channel empirical ablation benchmark
-│   ├── test_audit_chain.py      # SHA-256 hash chain, tamper & 16-thread concurrency tests
-│   ├── test_guardrails_and_api.py# Guardrails, Self-RAG, brute-force & TestClient HTTP tests
-│   ├── test_order_concurrency.py# Multi-thread stock race, BOM CTE & ACID rollback tests
-│   ├── test_retrieval.py        # RRF, BM25, Db2 buffer persistence & 2FA masking tests
+│   ├── test_audit_chain.py      # HMAC-SHA256 hash chain, tamper & 16-thread concurrency tests
+│   ├── test_guardrails_and_api.py# Guardrails, Self-RAG, Gemini schemas, operator key, IP lockout & HTTP tests
+│   ├── test_live_db2_smoke.py   # Opt-in live IBM Db2 container integration verification
+│   ├── test_order_concurrency.py# Multi-thread stock race, quantity-scaled BOM CTE & sequence/rollback tests
+│   ├── test_retrieval.py        # RRF, BM25, Db2 buffer hydration & 2FA masking tests
 │   ├── test_rrf_fusion.py       # Mathematical RRF rank decay & BM25 saturation tests
 │   └── test_session_memory.py   # Multi-tenant isolation, TTL eviction & concurrent threads
-└── docs/screenshots/            # 11 full-resolution UI & IBM Db2 VS Code proof screenshots
+└── docs/screenshots/            # Prototype UI & IBM Db2 VS Code proof screenshots + test traces
 ```
 
 ---
@@ -227,23 +229,23 @@ Start FastAPI via `uvicorn src.api:app --reload` and open **`http://127.0.0.1:80
 | `GET /api/cakes/search` | Hybrid catalog search (`eggless_only`, `max_price` budget filter) | 3-Way RRF + BSON metadata pushdown |
 | `GET /api/cakes/{cake_id}/availability` | Real-time ingredient & sub-assembly availability breakdown | Recursive `RECIPE_BOM` CTE |
 | `POST /api/orders` | End-to-end atomic order placement | BOM + `SP_RESERVE_CAKE_STOCK` + `BB_ORDERS` + `BB_AUDIT_LOG` |
-| `GET /api/orders/masked-summary` | Privacy-safe support dashboard order summary | `V_MASKED_BAKERY_ORDERS` view |
+| `GET /api/orders/masked-summary` | Privacy-safe support dashboard order summary (supports `X-Operator-Key`) | `V_MASKED_BAKERY_ORDERS` view |
 | `GET /api/orders/{order_id}` | 2FA phone-verified live order & item tracking | Sargable `IDX_BB_ORDER_PHONE` + `BB_ORDER_ITEMS` |
 | `POST /api/orders/{order_id}/refund` | Phone-authenticated Happiness Guarantee refund evaluation | Single-UOW `UPDATE` + `BB_AUDIT_LOG` |
-| `GET /api/audit/verify` | Mathematical verification of entire cryptographic audit log | `BB_AUDIT_LOG` SHA-256 chain traversal |
+| `GET /api/audit/verify` | Mathematical verification of entire cryptographic audit log (supports `X-Operator-Key`) | `BB_AUDIT_LOG` HMAC-SHA256 chain traversal |
 
 ---
 
 ## Retrieval Quality Benchmark
 
-Measured directly via `python tests/evaluate_retrieval.py` across **30 curated queries** (10 semantic cravings, 8 exact SKU/product title lookups, 6 Hinglish & dietary queries, 6 store policy/advisory queries) with **strict chunk/SKU ID verification** and metadata pushdown:
+Measured directly via `python tests/evaluate_retrieval.py` across **30 curated queries** (10 semantic cravings, 8 exact SKU/product title lookups, 6 Hinglish & dietary queries, 6 store policy/advisory queries) evaluated over the full **25-node catalog + policy corpus** with metadata pushdown:
 
 | Retrieval Channel Configuration | Hit @ 1 | Hit @ 3 | MRR | Avg Latency (CPU) | Notes |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Dense Vector Only** (`BAAI/bge-small-en-v1.5`) | 80.0% | 90.0% | 0.85 | ~20.5 ms | Strong semantic matching; misses exact SKU codes (`BB-RED-02-1kg`). |
-| **Sparse BM25 Only** (Okapi BM25) | 86.7% | 93.3% | 0.90 | < 1 ms | Fast keyword recall; weaker on semantic paraphrases. |
-| **Sparse TF-IDF Only** (Scikit-Learn) | 93.3% | 100.0% | 0.96 | ~2.9 ms | High exact n-gram precision across uniform short catalog chunks. |
-| **3-Way Hybrid RRF ($k=60$) + Hinglish CRAG** | **90.0%** | **100.0%** | **0.94** | **~28 ms** | **100% Top-3 recall across semantic, SKU, Hinglish & policy queries; eliminates single-channel dense/BM25 blindspots.** |
+| **Dense Vector Only** (`BAAI/bge-small-en-v1.5`) | 63.3% | 90.0% | 0.76 | ~25.2 ms | Strong semantic recall across paraphrases; misses exact SKUs (`BB-RED-02-1kg`). |
+| **Sparse BM25 Only** (Okapi BM25) | 76.7% | 86.7% | 0.81 | < 1 ms | Fast exact token/SKU lookup; drops when overlapping bakery terms dilute TF. |
+| **Sparse TF-IDF Only** (Scikit-Learn) | 76.7% | 96.7% | 0.86 | ~3.4 ms | Strong n-gram precision across catalog chunks, slightly weaker on vernacular synonyms. |
+| **3-Way Hybrid RRF ($k=60$) + Hinglish CRAG** | **83.3%** | **96.7%** | **0.89** | **~52.5 ms** | **Strictly outperforms every single individual channel on both Hit@1 (`83.3%`) and MRR (`0.89`) across semantic, SKU, Hinglish & policy queries.** |
 
 ---
 
@@ -292,6 +294,9 @@ ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:8000
 
 GEMINI_MODEL=gemini-1.5-flash
 GEMINI_API_KEY=your_gemini_api_key_here
+
+OPERATOR_API_KEY=your_operator_api_key_here
+AUDIT_HMAC_SECRET=your_audit_hmac_secret_here
 ```
 
 > **Security Hygiene:** Never commit `.env` or production database passwords to Git.
@@ -334,7 +339,7 @@ uvicorn src.api:app --reload
 
 ## Testing & Verification
 
-Run the official repository validator from the repository root, plus all 73 tests and the 30-query benchmark:
+Run the official repository validator from the repository root, plus all unit/API tests (`78` offline + `1` opt-in live-Db2 smoke test) and the 30-query benchmark:
 
 ```bash
 # From repo root:
@@ -347,8 +352,8 @@ python tests/evaluate_retrieval.py
 
 **Observed Output Summary:**
 * `scripts/validate_submission.py`: `ALL VALIDATION CHECKS PASSED.`
-* `python -m unittest discover -s tests -v`: `Ran 73 tests in ~21s — OK` (`0` errors, `0` failures)
-* `python tests/evaluate_retrieval.py`: `[PASSED] Empirical 4-channel ablation benchmark verified strictly against ground-truth IDs!` (`100.0% Hit@3`, `0.94 MRR`)
+* `python -m unittest discover -s tests -v`: `Ran 79 tests in ~46s — OK (skipped=1)` (`78` offline tests passed with `0` failures/`0` errors; `1` opt-in live-Db2 smoke test skipped cleanly when `.env` credentials are unset)
+* `python tests/evaluate_retrieval.py`: `[PASSED] Empirical 4-channel ablation benchmark verified strictly against ground-truth IDs!` (`83.3% Hit@1`, `96.7% Hit@3`, `0.89 MRR` on 25 knowledge nodes — strictly beating all individual channels)
 
 ---
 
@@ -374,9 +379,9 @@ python tests/evaluate_retrieval.py
 ## Technical Defense & Architectural FAQ
 
 * **Q1: Why keep `submissions/bakebox-choco-ai/` separate from the full React frontend repository?**  
-  In strict compliance with IBM Db2 TechX PR rules, the submission folder contains only self-contained backend AI/Db2 services, SQL RBAC scripts, and 73 offline-reproducible tests—never modifying repo root configs or peer submissions. Reviewers can test interactive UI workflows locally at `/demo` or watch the React storefront live in the [YouTube Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
+  In strict compliance with IBM Db2 TechX PR rules, the submission folder contains only self-contained backend AI/Db2 services, SQL RBAC scripts, and 79 offline/live tests (`78` offline + `1` opt-in live Db2 smoke test)—never modifying repo root configs or peer submissions. Reviewers can test interactive UI workflows locally at `/demo` or watch the React storefront live in the [YouTube Demo](https://youtu.be/NLrRq6FX358?si=oZM-EGpaBt4AOSVM).
 * **Q2: How do you ensure offline mock support does not mask real database failures?**  
-  `is_live_db2_available()` only enables `MockDb2Connection` when credentials are omitted/placeholder or `DB2_FORCE_MOCK=true`. Once real credentials are configured, [`src/db.py`](src/db.py) connects strictly via `ibm_db_dbi.connect(...)` and propagates authentic database exceptions.
+  `is_live_db2_available()` only enables `MockDb2Connection` when credentials are omitted/placeholder or `DB2_FORCE_MOCK=true`. Once real credentials are configured, [`src/db.py`](src/db.py) connects strictly via `ibm_db_dbi.connect(...)`, propagates authentic database exceptions, and enables `test_live_db2_smoke.py`.
 * **Q3: Why normalize `phone_last10` instead of querying `RIGHT(REPLACE(customer_phone, ...), 10)`?**  
   Wrapping an indexed column in scalar functions forces a table scan (bypassing `IDX_BB_ORDER_PHONE`) and risks Db2 `SQL0138N` errors on short values. Storing normalized digits in indexed `phone_last10` preserves fast B-Tree index seeks.
 
@@ -384,10 +389,10 @@ python tests/evaluate_retrieval.py
 
 ## Known Limitations & Future Roadmap
 
-* **Current Scope:** Lexical BM25 and TF-IDF channels operate in-memory over synchronized Db2 catalog chunks (ideal for catalogs under ~10k items), and automated CI/unit checks run against our PEP 249 `MockDb2Connection` rather than spinning up Db2 in CI.
+* **Current Scope:** Lexical BM25 and TF-IDF channels operate in-memory over synchronized Db2 catalog chunks (ideal for catalogs under ~10k items), and automated CI checks default to PEP 249 `MockDb2Connection` when live Db2 credentials are absent (with `test_live_db2_smoke.py` ready to run whenever `docker-compose.yml` is booted).
 * **Roadmap:**
   * Transition lexical channels to **IBM Db2 Text Search (`CONTAINS` / `SCORE`)** executed natively alongside `VECTOR_DISTANCE` for 100k+ item catalogs.
-  * Add live-Db2 integration CI job using `docker-compose.yml` service containers and operator JWT auth middleware for `/api/audit/verify`.
+  * Add role-scoped JWT session issuance on top of `X-Operator-Key` and scheduled Docker Compose live-Db2 CI runners.
   * Dynamic kitchen queue balancing across Holigate and Gosna ovens backed by `V_ACTIVE_BAKERY_ORDERS`.
 
 ---
@@ -402,4 +407,5 @@ python tests/evaluate_retrieval.py
 
 ## License
 
-Distributed under the [MIT License](LICENSE). Third-party open-source dependencies and pre-trained embedding model attributions are declared in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+**100% Original Submission** authored and copyrighted (c) 2026 by **Ayush Dhangar** (`@AYUSHDHANGAR`), released under the [MIT License](LICENSE).  
+Standard open-source `pip` dependencies and embedding model licenses (per Db2Hack 2026 rules) are declared in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
