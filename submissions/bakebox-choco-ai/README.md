@@ -10,34 +10,6 @@
 
 ---
 
-## Judge Quickstart (Verify in 60 Seconds — Zero Docker Required)
-
-Reviewers can run **78 automated offline tests** (`+1` opt-in live-Db2 smoke test), verify the **30-query retrieval ablation benchmark across 25 knowledge nodes**, and test the **live interactive `/demo` web console** without Db2 credentials or external API keys (powered by our snapshot-rollback PEP 249 `MockDb2Connection` and `_OfflineMockVectorStore` cosine simulator):
-
-1. **Enter submission folder & install dependencies:**
-   ```bash
-   cd submissions/bakebox-choco-ai
-   pip install -r requirements.txt
-   ```
-2. **Run all 79 tests across 7 suites (`78` passed offline + `1` opt-in live-Db2 container test):**
-   ```bash
-   python -m unittest discover -s tests -v
-   ```
-3. **Run the 30-query, 4-channel retrieval evaluation benchmark:**
-   ```bash
-   python tests/evaluate_retrieval.py
-   ```
-4. **Launch FastAPI & Interactive Judge Console (`/demo` & `/docs`):**
-   ```bash
-   uvicorn src.api:app --reload
-   # Interactive Browser Playground : http://127.0.0.1:8000/demo
-   # OpenAPI / Swagger Docs         : http://127.0.0.1:8000/docs
-   ```
-
-*(Prefer running against a real IBM Db2 Community Edition 12.1 container? Jump to [Running with Live IBM Db2 (Docker)](#running-with-live-ibm-db2-docker).)*
-
----
-
 ## Table of Contents
 - [1. Project Overview](#1-project-overview)
 - [2. Problem We Are Solving (Customer & Business POV)](#2-problem-we-are-solving-customer--business-pov)
@@ -81,15 +53,23 @@ Reviewers can run **78 automated offline tests** (`+1` opt-in live-Db2 smoke tes
 ## 2. Problem We Are Solving (Customer & Business POV)
 
 ### A. Information Hesitation & Short Hardcoded Descriptions (Customer POV)
+
 * **Query Resolution & Short Frontend Descriptions:** Customers frequently want verified answers on weight, quality, portion quantity, ingredient freshness, and replacement/refund policies — details that are impossible to hardcode cleanly onto every small storefront card without cluttering the UI.
+  
 * **Sweetness & Flavor Guesswork:** Shoppers hesitate over subjective taste profiles (*"Is this cake overly sweet, balanced cream cheese, or dark bitter-sweet ganache?"*) and feel awkward calling staff repeatedly for small clarifications.
+  
 * **The "Baking Knowledge" Gap:** Online buyers often do not know the difference between regular eggless sponge vs authentic Mathura **Khoaa Eggless** bases, how `0.5kg` vs `1.0kg` tiers serve different party sizes, or why fresh made-to-order baking takes **3–4 hours**.
+  
 * **Support Drop-Off Post-9 PM:** Local bakery phone lines close around closing hours, leaving late-night birthday planners and midnight snack inquiries completely unanswered.
 
 ### B. Communication, Fulfillment & Operational Bottlenecks (Business POV)
+
 * **Lost Late-Night Conversions:** When human operators go offline after 9 PM, high-intent celebration customers abandon orders due to unanswered menu, policy, or delivery questions.
+  
 * **Staff Support Fatigue:** Sales counter and kitchen teams lose hours every week answering repetitive calls (*"Eggless milega?"*, *"Kitna meetha hai?"*, *"Wait time kya hai?"*, *"Patty garam kaise karein?"*) instead of baking fresh orders.
+  
 * **Custom Cake Variety Hard to Hardcode:** Describing dozens of seasonal combinations across custom designs, weights, frosting styles, and base options manually in static frontend templates does not scale.
+  
 * **Last-Item Overselling & Raw Ingredient Blind Spots:** Simultaneous online checkouts on the last ready cake can oversell stock without DB row locks, while accepting a custom cake order without checking sub-assembly raw materials (e.g., *Fresh Milk Solids* for *Khoaa*, or *Maraschino Cherries*) leads to last-minute cancellations.
 
 ---
@@ -99,26 +79,17 @@ Reviewers can run **78 automated offline tests** (`+1` opt-in live-Db2 smoke tes
 CHOCO AI solves every customer and operational bottleneck above using **IBM Db2 Hybrid RAG**, **5 Request-Scoped Agentic Tools**, and **ACID In-Database Execution**:
 
 * **Instant Food & Ingredient Intelligence:** Customers freely ask natural questions about ingredients, food quality, portion quantity, sweetness profiles, allergens, and cake weights (`0.5kg` vs `1.0kg`) retrieved directly from indexed **IBM Db2** knowledge vectors.
+  
 * **Contextual Cake Advisory (Preferred Language & Bilingual Support):** Powered by **Google Gemini 1.5 Flash (`gemini-1.5-flash`)** and **Hinglish Corrective RAG (CRAG)**, CHOCO AI understands queries in both English and conversational Hinglish (*"bina ande wala aadha kilo cake"* $\rightarrow$ `Pure Veg Khoaa Eggless 0.5kg`) and recommends up to **3 verified catalog cards**.
+  
 * **Zero-Hallucination Live Order Tracking:** Uses real-time agentic tool calls (`track_live_order`) backed by parameterized SQL on `BB_ORDERS` and `BB_ORDER_ITEMS` (with 2FA phone verification and masked PII) so customers get exact `CONFIRMED` / `BAKING` / `DELIVERED` status updates without phone calls.
+  
 * **24/7 Interactive Session Continuity:** Persists every conversation turn inside IBM Db2 (`BB_USER_CONVERSATION_BUFFER`) and automatically rehydrates cleared/restarted sessions on cache miss so follow-up questions keep full context.
+  
 * **Multi-Level Raw Ingredient & Stock Safety:** Runs a quantity-scaled **IBM Db2 Recursive Bill-of-Materials (BOM) CTE** (`check_cake_ingredients_bom`) plus row-level `FOR UPDATE WITH RS` stock locking (`SP_RESERVE_CAKE_STOCK`) before confirming any order.
+  
 * **Verified Culinary Care & Happiness Guarantee Guidelines:** Post-generation **Self-RAG verification** guarantees consistent store guidance — patties must **ONLY** be reheated on a **dry tawa** (never microwave), cakes require **chilled refrigeration (`24h` shelf life) before cutting**, fresh cakes take **3–4 hours** to bake, and damaged orders route cleanly to phone-authenticated Happiness Guarantee replacements/refunds.
 
----
-
-## 4. Hackathon Rubric Alignment Matrix
-
-| Criterion | Weight | Implemented & Verified in Repository | Key Modules |
-| :--- | :---: | :--- | :--- |
-| **1. IBM Db2 Integration & Depth** | **25%** | Native `VECTOR(384, FLOAT32)` + `SYSTOOLS.BSON2JSON` predicate pushdown (`DB2LlamaVS`); Quantity-scaled Recursive `RECIPE_BOM` CTE (`UNION ALL`, typed `DECIMAL(10, 4)`); `SEQ_BB_ORDER_ID` collision-free sequence; SQL PL `SP_RESERVE_CAKE_STOCK` (`FOR UPDATE OF stock_qty WITH RS` + `WHERE CURRENT OF`); cascading FKs (`BB_ORDERS` / `BB_ORDER_ITEMS`); sargable `phone_last10` B-Tree index; `V_ACTIVE_BAKERY_ORDERS` & `V_MASKED_BAKERY_ORDERS`; Db2 session buffer hydration; `BB_AUDIT_LOG`. | [`src/db.py`](src/db.py)<br>[`src/ingest.py`](src/ingest.py)<br>[`src/order_engine.py`](src/order_engine.py)<br>[`src/vector_store.py`](src/vector_store.py) |
-| **2. Innovation & Real-World Impact** | **20%** | Tailored digital extension for 20-year regional bakery **Shri Ram Baker's** (Holigate & Gosna, Mathura) with **15 curated catalog SKUs (`25` RAG nodes)**; Hinglish CRAG expansion; Self-RAG culinary safety; live `/demo` browser console requiring zero frontend build tools. | [`data/sample_catalog.json`](data/sample_catalog.json)<br>[`src/retriever.py`](src/retriever.py)<br>[`src/demo_ui.py`](src/demo_ui.py) |
-| **3. Technical Architecture & AI** | **15%** | Clean 9-module backend; **Gemini 1.5 Flash (`gemini-1.5-flash`)** via official `google-genai` SDK (`AutomaticFunctionCallingConfig`) with 5 request-scoped agentic tool closures; 3-Way Reciprocal Rank Fusion ($k=60$) with cached `BAAI/bge-small-en-v1.5` embeddings; Db2 session hydration; full `--no-llm` deterministic parity; aligned [`architecture.md`](architecture.md). | [`src/query_engine.py`](src/query_engine.py)<br>[`src/api.py`](src/api.py)<br>[`architecture.md`](architecture.md) |
-| **4. Security** | **15%** | Zero committed secrets; isolated local `.env`; least-privilege Db2 roles & append-only `BB_AUDIT_LOG` ([`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)); parameterized `?` SQL + `validate_doc_id()` blocking upstream driver SQLi; `X-Operator-Key` admin guard; keyed **HMAC-SHA256** audit chain sealing UTC `_audit_ts`; 2FA + IP-partitioned `OrderAuthRateLimiter` + PII masking; NFKC + zero-width prompt guard + HTTP `400` validation + output scrubbing + CORS allowlist. | [`src/security.py`](src/security.py)<br>[`sql/least_privilege_setup.sql`](sql/least_privilege_setup.sql)<br>[`.env.example`](.env.example) |
-| **5. Reproducibility & Code Quality** | **15%** | **78 offline tests passing + 1 opt-in live-Db2 smoke test** (`79` discovered across `7` suites, `0 errors, 0 failures`) covering concurrency, sequences, scaled BOM, ACID rollback injection, Gemini tool schemas, HTTP `TestClient`, `X-Operator-Key`, IP rate limits, and audit tamper detection; empirical 30-query benchmark; Docker Compose setup; Python 3.10–3.14 support. | [`tests/`](tests/)<br>[`docker-compose.yml`](docker-compose.yml)<br>[`requirements.txt`](requirements.txt) |
-| **6. Documentation & Presentation** | **10%** | Complete [`submission.json`](submission.json), MIT [`LICENSE`](LICENSE), original-authorship [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md), verified [`architecture.md`](architecture.md), curated [`docs/screenshots/`](docs/screenshots/README.md), YouTube video walkthrough, LinkedIn showcase, and strict commit hygiene inside `submissions/bakebox-choco-ai/`. | [`README.md`](README.md)<br>[`submission.json`](submission.json)<br>[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
-
----
 
 ## 5. IBM Db2 Integration & Transactional Engine
 
@@ -137,17 +108,22 @@ flowchart LR
 
 ### Provisioned Database Objects ([`src/ingest.py`](src/ingest.py))
 * **Native Vector Store (`BB_CHUNKS_VECTOR`):** Stores `VECTOR(384, FLOAT32)` embeddings alongside `metadata BLOB`, filtering dietary/price/type predicates in-engine via `SYSTOOLS.BSON2JSON`.
+  
 * **Orders & Line Items (`BB_ORDERS`, `BB_ORDER_ITEMS`, `SEQ_BB_ORDER_ID`):**
   * `BB_ORDERS` maintains a normalized `phone_last10 VARCHAR(10)` column indexed via `IDX_BB_ORDER_PHONE` for sargable O(log N) 2FA lookup.
   * `SEQ_BB_ORDER_ID` allocates unique primary keys across concurrent multi-cake checkouts without full-table scans.
   * `BB_ORDER_ITEMS` enforces `FK_BB_ORDER FOREIGN KEY (order_id) REFERENCES BB_ORDERS(order_id) ON DELETE CASCADE` and stores catalog-matched item weights (`0.15kg`, `0.5kg`, `1.0kg`).
+    
 * **Catalog & Multi-Level BOM (`BB_CAKES`, `BB_INVENTORY`, `BB_RECIPES`, `BB_INGREDIENT_COMPONENTS`):** Models finished cakes, multi-tier ingredient sub-assemblies (*Khoaa Base* $\rightarrow$ *Fresh Milk Solids*, *Cream Cheese Frosting* $\rightarrow$ *Whipped Dairy Cream*), and savory puff pastries.
+  
 * **Conversation & Audit Tables (`BB_USER_CONVERSATION_BUFFER`, `BB_AUDIT_LOG`):** Persists and rehydrates isolated session turns in Db2, and maintains an append-only cryptographic business ledger.
+  
 * **Operational Views & SQL PL Procedure (`V_ACTIVE_BAKERY_ORDERS`, `V_MASKED_BAKERY_ORDERS`, `SP_RESERVE_CAKE_STOCK`):**
   * `SP_RESERVE_CAKE_STOCK` opens a cursor with `FOR UPDATE OF stock_qty WITH RS`, updates stock using `WHERE CURRENT OF lock_cur`, and returns `DYNAMIC RESULT SETS 1` inside the caller's single transaction.
 
 ### Atomic Checkout Transaction (`place_verified_order_atomic()`)
 1. **Quantity-Scaled BOM CTE Check:** Executes `CAST(r.QTY_NEEDED * CAST(? AS DECIMAL(10, 4)) AS DECIMAL(10, 4))` up to depth `5`; blocks orders cleanly if raw ingredients fall short for the requested `quantity` (e.g., Cake #2 missing *Maraschino Cherries*, or `30x` Cake #1 exceeding *Khoaa Base*).
+   
 2. **Row-Level Stock Lock & Sequence Allocation:** Calls `SP_RESERVE_CAKE_STOCK` (`commit=False`) under `WITH RS` isolation, then reserves the next Order ID via `SEQ_BB_ORDER_ID`.
 3. **Single-UOW Relational + Audit Commit:** Inserts `BB_ORDERS` + `BB_ORDER_ITEMS`, appends a keyed **HMAC-SHA256** `ORDER_PLACED` block into `BB_AUDIT_LOG` (under `LOCK TABLE BB_AUDIT_LOG IN EXCLUSIVE MODE`), and executes **one atomic `conn.commit()`** (or full `conn.rollback()` on any error).
 
@@ -180,7 +156,9 @@ Customer Query ─▶ Security Guardrail (Unicode NFKC + Zero-Width Strip + Bili
 ```
 
 * **Dynamic Gemini 1.5 Flash Runtime ([`src/query_engine.py`](src/query_engine.py)):** Resolves `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-1.5-flash` dynamically via `_resolve_gemini_runtime()`, configuring explicit `AutomaticFunctionCallingConfig(disable=False, maximum_remote_calls=6)` via `google-genai`.
+  
 * **Request-Scoped Tool Isolation:** `_build_request_tools(call_state, session_id)` binds fresh per-request Python tool callables for every query so concurrent sessions never cross-contaminate `ui_cards`, `order_details`, or `placed_order`.
+  
 * **Db2 Session Hydration & `--no-llm` Parity:** Cache misses automatically reload prior turns from `BB_USER_CONVERSATION_BUFFER`; offline `--no-llm` mode routes recommendations, BOM availability checks, store policies, structured checkout, and 2FA tracking deterministically.
 
 ### The 5 Request-Scoped Agentic Tools (`src/query_engine.py`)
@@ -248,6 +226,7 @@ response = runtime["client"].models.generate_content(
 ```
 
 * **Automatic Tool Orchestration & Synthesis:** Gemini 1.5 Flash compiles all 5 typed Python callables into `FunctionDeclaration` schemas, decides autonomously which Db2 tools to invoke (chaining BOM + recommendation + tracking when needed), inspects live DB results, and synthesizes a polite Hinglish/English reply before [`SelfRAGEvaluator`](src/query_engine.py) verifies factual rules.
+  
 * **Legacy SDK & Zero-Hallucination Offline Fallbacks:** If only legacy `google-generativeai` is present, `_invoke_gemini_with_tools()` falls back cleanly to `GenerativeModel(..., tools=tools).start_chat(enable_automatic_function_calling=True)`; when `GEMINI_API_KEY` is omitted or `--no-llm` is passed, the deterministic dispatcher routes the exact same Db2 tools reliably with zero hallucinations.
 
 ---
@@ -471,7 +450,7 @@ python src/ingest.py
 
 | Name | GitHub | Role & Background |
 |---|---|---|
-| **Ayush Dhangar** | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML (4th Year) · Ex-ML Intern, Pantech Prolab Pvt Ltd · AI Systems & Db2 Solutions Architect |
+| **Ayush Dhangar** | [@AYUSHDHANGAR](https://github.com/AYUSHDHANGAR) | BTech CSE-AIML (4th Year) · Ex-ML Intern, Pantech Prolab Pvt Ltd · AI Engineer & AI SYSTEM DEVELOPER |
 
 ### License & Attribution
 * **100% Original Hackathon Submission** authored and copyrighted (c) 2026 by **Ayush Dhangar** (`@AYUSHDHANGAR`), distributed under the [MIT License](LICENSE).
